@@ -25,6 +25,7 @@
 |-| - | - | - | - |
 | 2.0.1 | 11.7.1 | Pass | Fail to compile | Pass |
 | 2.2.0 | 12.1.1 | Pass | Pass | Pass |
+| 2.9.0 | 12.8 | Linux target | Not tested | Not tested |
 
 ## Installation
 
@@ -36,11 +37,11 @@ Our default installation method is based on Conda package and environment manage
 git clone https://github.com/ShenhanQian/GaussianAvatars.git --recursive
 cd GaussianAvatars
 
-conda create --name gaussian-avatars -y python=3.10
+conda create --name gaussian-avatars -y python=3.11
 conda activate gaussian-avatars
 
 # Install CUDA and ninja for compilation
-conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja  # use the right CUDA version
+conda install -c "nvidia/label/cuda-12.8.0" cuda-toolkit ninja
 ```
 
 ### 2. Setup paths
@@ -86,11 +87,22 @@ conda activate gaussian-avatars
 
 ```shell
 # Install PyTorch (make sure that the CUDA version matches with "Step 1")
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
-# or
-conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
+pip install torch==2.9.0 torchvision==0.24.0 --index-url https://download.pytorch.org/whl/cu128
 # make sure torch.cuda.is_available() returns True
 
 # Install the rest packages (can take a while to compile diff-gaussian-rasterization, simple-knn, and nvdiffrast)
+export TORCH_CUDA_ARCH_LIST="12.0"
 pip install -r requirements.txt
 ```
+
+For RTX 5090 / Blackwell, `TORCH_CUDA_ARCH_LIST="12.0"` is important when
+building the local CUDA extensions (`diff-gaussian-rasterization`,
+`simple-knn`, and `nvdiffrast`). This branch uses the same submodule commits as
+MTamon/FlashAvatar `release/cuda128-fixed` for these two Gaussian Splatting
+extensions:
+
+- `diff-gaussian-rasterization`: `59f5f77e3ddbac3ed9db93ec2cfe99ed6c5d121d`
+- `simple-knn`: `60f461f4a56b7967e5d8045bf92f8c33f36976d0`
+
+If pip reuses an older cached build, reinstall those packages with
+`--no-build-isolation --no-cache-dir --force-reinstall`.
