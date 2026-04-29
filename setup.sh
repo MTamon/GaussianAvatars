@@ -109,11 +109,26 @@ python -m pip install --upgrade pip==25.2
 # / scene/dataset_readers.py / scene/__init__.py).
 python -m pip install --no-deps pillow==12.0.0
 
-# chumpy (git main — numpy 2.x friendly; HRAvatar128/DECA128 use the exact
-# same source). The PyPI wheel breaks under numpy 2.x; use the maintained git
-# fork. Required because flame_model/flame.py loads the FLAME pkl with
-# encoding="latin1", which deserialises chumpy.Ch arrays.
-python -m pip install git+https://github.com/mattloper/chumpy.git
+# chumpy (mattloper master, pinned to a specific SHA — numpy 2.x friendly;
+# HRAvatar128/DECA128 use the exact same source). The PyPI wheel (0.70) breaks
+# under numpy 2.x; the master branch is patched but unreleased. Required
+# because flame_model/flame.py loads the FLAME pkl with encoding="latin1",
+# which deserialises chumpy.Ch arrays.
+#
+# SHA 580566ea is the Aug-2025 maintenance commit
+# ("ci: drop Python 2 checks; migrate CI to CircleCI 2.1 + Python 3.12").
+# At this SHA chumpy/version.py reports '0.71', matching the chumpy-fork
+# PyPI fork that the companion VHAP branch uses, so version checks across
+# both stacks line up.
+CHUMPY_SHA="580566eafc9ac68b2614b64d6f7aaa84eebb70da"
+python -m pip install "git+https://github.com/mattloper/chumpy.git@${CHUMPY_SHA}"
+python - <<'PY'
+import chumpy
+assert chumpy.__version__ == "0.71", \
+    f"chumpy version drift: got {chumpy.__version__}, expected 0.71"
+assert hasattr(chumpy, "Ch"), \
+    "chumpy.Ch missing — FLAME pickle deserialisation will fail"
+PY
 
 # Pinned deps. Installed with --no-deps to avoid pip rewriting the pin set.
 python -m pip install --no-deps filelock==3.20.0
