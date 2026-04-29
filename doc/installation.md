@@ -2,7 +2,7 @@
 
 ### Hardware Requirements
 
-- CUDA-ready GPU with Compute Capability 7.0+ (Blackwell sm_120 / RTX 5090 supported on the cuda128 branch)
+- CUDA-ready GPU with Compute Capability 7.0+
 - 11 GB VRAM (we used RTX 2080Ti)
 
 ### Software Requirements
@@ -25,85 +25,22 @@
 |-| - | - | - | - |
 | 2.0.1 | 11.7.1 | Pass | Fail to compile | Pass |
 | 2.2.0 | 12.1.1 | Pass | Pass | Pass |
-| 2.9.1 | 12.8 (sm_120) | Pass (Linux) | Not tested | Not tested |
 
 ## Installation
 
-### Recommended (Linux, CUDA 12.8, RTX 5090 / Blackwell)
+Our default installation method is based on Conda package and environment management:
 
-This branch ships a deterministic installer that mirrors the
-`install_128.sh` / `setup.sh` pattern from
-[MTamon/DECA](https://github.com/MTamon/DECA/tree/release/cuda128),
-[MTamon/HRAvatar](https://github.com/MTamon/HRAvatar/tree/release/cuda128) and
-[MTamon/FlashAvatar](https://github.com/MTamon/FlashAvatar/tree/release/cuda128-fixed).
-Every dependency is pip-installed with `--no-deps` against a pinned version
-list, so the resulting environment is reproducible across machines.
-
-#### Preconditions
-
-- System CUDA Toolkit **12.8** is installed (or the conda env created by
-  `environment.yml` is used).
-- gcc-11 / g++-11 are available (Ubuntu 22.04: `sudo apt install gcc-11 g++-11`).
-- Submodules are initialised:
+### 1. Create conda environment and install CUDA
 
 ```shell
-git clone https://github.com/MTamon/GaussianAvatars.git --recursive
+git clone https://github.com/ShenhanQian/GaussianAvatars.git --recursive
 cd GaussianAvatars
-# (or) git submodule update --init --recursive
-```
 
-#### One-shot install
-
-```shell
-# Creates conda env `gaussian-avatars` (Python 3.11 + CUDA 12.8 toolkit)
-# and installs every Python dep, nvdiffrast, and the two CUDA submodules.
-bash setup.sh
-```
-
-To install into an already-active python (e.g. an existing conda or venv) and
-skip the conda-env step:
-
-```shell
-bash setup.sh --pip-only
-```
-
-The script narrows `TORCH_CUDA_ARCH_LIST` to `7.5;8.0;8.6;8.9;9.0;12.0` by
-default; export your own value beforehand to override (e.g.
-`export TORCH_CUDA_ARCH_LIST="12.0"` for an RTX 5090-only build, which
-significantly cuts compile time for the local CUDA extensions).
-
-If pip reuses an older cached build, reinstall the local extensions with:
-
-```shell
-python -m pip install --no-build-isolation --no-deps --force-reinstall \
-  --no-cache-dir ./submodules/diff-gaussian-rasterization
-python -m pip install --no-build-isolation --no-deps --force-reinstall \
-  --no-cache-dir ./submodules/simple-knn
-```
-
-#### Submodule pins
-
-This branch uses the same submodule commits as
-MTamon/FlashAvatar `release/cuda128-fixed`, both of which build cleanly
-against PyTorch 2.9.1 + CUDA 12.8 with `TORCH_CUDA_ARCH_LIST` including
-`12.0`:
-
-- `diff-gaussian-rasterization`: `59f5f77e3ddbac3ed9db93ec2cfe99ed6c5d121d`
-  (graphdeco-inria upstream)
-- `simple-knn`: `60f461f4a56b7967e5d8045bf92f8c33f36976d0`
-  (camenduru fork; the original INRIA GitLab URL has been replaced)
-
-### Legacy installation (CUDA 11.7 / 12.1)
-
-The original conda + `requirements.txt` flow is still available for the older
-PyTorch / CUDA combinations listed in the table above:
-
-```shell
 conda create --name gaussian-avatars -y python=3.10
 conda activate gaussian-avatars
-conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
-pip install -r requirements.txt   # NOTE: only valid on the legacy branches
+
+# Install CUDA and ninja for compilation
+conda install -c "nvidia/label/cuda-11.7.1" cuda-toolkit ninja  # use the right CUDA version
 ```
 
 ### 2. Setup paths
@@ -143,4 +80,17 @@ conda env config vars set PATH="%CONDA_PREFIX%\Script;C:\Program Files (x86)\Mic
 # re-activate the environment to make the above eonvironment variables effective
 conda deactivate
 conda activate gaussian-avatars
+```
+
+### 3. Install PyTorch and other packages
+
+```shell
+# Install PyTorch (make sure that the CUDA version matches with "Step 1")
+pip install torch torchvision --index-url https://download.pytorch.org/whl/cu117
+# or
+conda install pytorch torchvision pytorch-cuda=11.7 -c pytorch -c nvidia
+# make sure torch.cuda.is_available() returns True
+
+# Install the rest packages (can take a while to compile diff-gaussian-rasterization, simple-knn, and nvdiffrast)
+pip install -r requirements.txt
 ```
