@@ -4,10 +4,35 @@
 # conda env (default: `gaussian-avatars`).
 #
 # Both projects pin Python 3.11 + PyTorch 2.9.1 + CUDA 12.8 and use
-# `--no-deps` everywhere, so a sequential install is safe. Where versions
-# overlap, the second installer (VHAP) wins; this is intentional because
-# VHAP's chumpy-fork alias mechanism needs to be the active one for both
-# pipelines.
+# `--no-deps` everywhere, so a sequential install is safe. The order below
+# (GA first, then VHAP --pip-only) means the LAST writer wins on the few
+# packages that disagree:
+#
+#   - tyro     : VHAP pins 0.8.14, GA pins 0.9.13.   --> VHAP's 0.8.14 wins.
+#                The 0.8/0.9 series shares the tyro.cli + nested-dataclass +
+#                tyro.extras.set_accent_color surface used by both stacks,
+#                so 0.8.14 is functionally equivalent for our call sites.
+#                If GA's local_viewer/remote_viewer ever needs a 0.9-only
+#                feature, force-reinstall after this script:
+#                  pip install --no-deps tyro==0.9.13
+#
+#   - dearpygui: VHAP pins 1.11.1, GA pins 2.1.4.    --> VHAP's 1.11.1 wins.
+#                DPG 2.0 is a major-bump with breaking changes in plotting
+#                (ImPlot/ImNodes split). Demos do NOT use any viewer, so
+#                this only affects optional GUIs:
+#                  - VHAP flame_viewer.py / flame_editor.py: need 1.x.
+#                  - GA local_viewer.py / remote_viewer.py: tested with 2.x
+#                    but uses basic widgets only, so 1.11.1 likely works.
+#                If a viewer breaks, override with:
+#                  pip install --no-deps dearpygui==2.1.4   (or 1.11.1)
+#
+#   - chumpy   : Pin policy depends on the VHAP branch you check out.
+#                If VHAP's setup.sh still installs `chumpy-fork==0.71` and
+#                writes the chumpy/__init__.py alias, that alias wins and
+#                serves both projects fine. If VHAP has been updated to
+#                install mattloper/chumpy directly (matching GA's setup.sh),
+#                the GA install runs first and is left untouched.
+#                Either way `import chumpy; chumpy.Ch` works.
 #
 # Usage:
 #   bash demo/setup_env.sh                # full install

@@ -57,8 +57,17 @@ bash demo/setup_env.sh
 2. `conda activate gaussian-avatars`
 3. `bash submodules/VHAP/setup.sh --pip-only --no-assets` — 同じ env に VHAP スタックを追加
 
-衝突する数件 (tyro / chumpy / dearpygui) は VHAP の pin が後勝ちで採用され、
-chumpy-fork の alias 機構によって両プロジェクトの `import chumpy` が機能します。
+衝突する 3 パッケージは GA → VHAP の順インストールにより VHAP の pin が
+後勝ちで採用されます (詳細は `demo/setup_env.sh` 冒頭コメント参照):
+
+| パッケージ | GA pin | VHAP pin | 結果 (env内) | 影響 |
+| --- | --- | --- | --- | --- |
+| tyro | 0.9.13 | 0.8.14 | **0.8.14** | 両者の `tyro.cli(dataclass)` は 0.8/0.9 で互換、影響なし |
+| dearpygui | 2.1.4 | 1.11.1 | **1.11.1** | デモ非依存。viewer を使う場合のみ要注意 |
+| chumpy | mattloper master (git) | (VHAPの実装による) | VHAPに依存 | `import chumpy` + `chumpy.Ch` が機能すればOK |
+
+特定パッケージだけ別バージョンにしたい場合は env を活性化したあとに
+`pip install --no-deps <pkg>==<ver>` で上書きしてください。
 
 env 名を変えたい場合は `GA_ENV` を export してください。
 
