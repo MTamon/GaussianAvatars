@@ -139,6 +139,12 @@ python local_viewer.py \
 
 ### [3. Offline Rendering](doc/offline_render.md)
 
+### [4. End-to-End Demo (VHAP preprocess → train → render)](demo/README.md)
+
+End-to-end demo scripts using the [VHAP cuda128 fork](https://github.com/MTamon/VHAP/tree/cuda128)
+(integrated as a submodule under `submodules/VHAP`) are provided in
+[`demo/`](demo/). They cover monocular and NeRSemble multi-view inputs.
+
 ## Cite
 
 If you find our paper or code useful in your research, please cite with the following BibTeX entry:
