@@ -2,6 +2,9 @@
 # -----------------------------------------------------------------------------
 # Demo 3: Render images and MP4s from a trained GaussianAvatars model.
 #
+# Streams the tqdm "Rendering progress" bar from render.py:70 in real time
+# (PYTHONUNBUFFERED=1 set in _common.sh).
+#
 # Inputs:
 #   MODEL_PATH        Absolute path to the trained model directory
 #                     (the ${MODEL_PATH} from demo/02_train.sh).
@@ -38,7 +41,7 @@ fi
 
 ITERATION="${ITERATION:--1}"
 
-activate_env "${GA_ENV}"
+activate_env
 cd "${REPO_ROOT}"
 
 RENDER_ARGS=( -m "${MODEL_PATH}" --iteration "${ITERATION}" )
@@ -59,7 +62,7 @@ log "  iter   : ${ITERATION}"
 [ -n "${SELECT_CAMERA_ID:-}" ] && log "  camera : ${SELECT_CAMERA_ID}"
 [ -n "${TARGET_PATH:-}" ]      && log "  target : ${TARGET_PATH}"
 
-python render.py "${RENDER_ARGS[@]}"
+${PYTHON} render.py "${RENDER_ARGS[@]}"
 
 log "Rendering finished. PNG sequences and MP4s are under:"
 echo "    ${MODEL_PATH}/{train,val,test}/ours_*/"

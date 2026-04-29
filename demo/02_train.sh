@@ -2,6 +2,9 @@
 # -----------------------------------------------------------------------------
 # Demo 2: Train a GaussianAvatars head avatar.
 #
+# Streams the tqdm "Training progress" bar from train.py:60 in real time
+# (PYTHONUNBUFFERED=1 set in _common.sh).
+#
 # Inputs:
 #   SOURCE_PATH    Absolute path to a VHAP-exported NeRF-style dataset folder
 #                  (the ${EXPORT_OUTPUT_FOLDER} printed by demo 01_*).
@@ -43,7 +46,7 @@ MODEL_PATH="${MODEL_PATH:-${REPO_ROOT}/output/${RUN_NAME}}"
 ITERATIONS="${ITERATIONS:-600000}"
 PORT="${PORT:-60000}"
 
-activate_env "${GA_ENV}"
+activate_env
 cd "${REPO_ROOT}"
 
 mkdir -p "$(dirname "${MODEL_PATH}")"
@@ -53,7 +56,7 @@ log "  source : ${SOURCE_PATH}"
 log "  model  : ${MODEL_PATH}"
 log "  iters  : ${ITERATIONS}"
 
-python train.py \
+${PYTHON} train.py \
   -s "${SOURCE_PATH}" \
   -m "${MODEL_PATH}" \
   --eval \

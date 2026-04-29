@@ -3,9 +3,11 @@
 # Shared helpers for the demo scripts under demo/.
 #
 # - Resolves the repository root and the VHAP submodule path.
-# - Provides a small wrapper around `conda activate` that errors clearly if the
-#   target environment does not exist.
-# - Defines default conda env names used across the demos.
+# - Activates a single unified conda env (default: gaussian-avatars) that
+#   carries both the GaussianAvatars and the VHAP dependency stack. Use
+#   `bash demo/setup_env.sh` to populate it.
+# - Forces unbuffered Python output so tqdm progress bars render live during
+#   long-running preprocess / train / render stages.
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
@@ -15,16 +17,17 @@ DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${DEMO_DIR}/.." && pwd)"
 VHAP_DIR="${REPO_ROOT}/submodules/VHAP"
 
-# Conda env names. Override by exporting before invoking the demo scripts.
+# Single unified conda env. Override by exporting GA_ENV before invoking.
 GA_ENV="${GA_ENV:-gaussian-avatars}"
-VHAP_ENV="${VHAP_ENV:-VHAP}"
+
+# tqdm writes to stderr by default. Disabling Python stdout/stderr buffering
+# ensures progress bars update in real time when scripts are executed under
+# nohup/tee/CI runners. PYTHON is the canonical interpreter shim used below.
+export PYTHONUNBUFFERED=1
+PYTHON="python -u"
 
 activate_env() {
-  local env_name="$1"
-  if [ -z "${env_name}" ]; then
-    echo "[_common.sh] activate_env: missing env name" >&2
-    exit 2
-  fi
+  local env_name="${1:-${GA_ENV}}"
 
   if ! command -v conda >/dev/null 2>&1; then
     echo "[_common.sh] conda is not on PATH. Install/initialise conda first." >&2
@@ -36,11 +39,7 @@ activate_env() {
 
   if ! conda env list | awk '{print $1}' | grep -qx "${env_name}"; then
     echo "[_common.sh] conda env '${env_name}' not found." >&2
-    if [ "${env_name}" = "${GA_ENV}" ]; then
-      echo "  -> create it with: bash ${REPO_ROOT}/setup.sh" >&2
-    elif [ "${env_name}" = "${VHAP_ENV}" ]; then
-      echo "  -> create it with: bash ${VHAP_DIR}/setup.sh" >&2
-    fi
+    echo "  -> create the unified env with: bash ${DEMO_DIR}/setup_env.sh" >&2
     exit 1
   fi
 

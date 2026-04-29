@@ -8,6 +8,9 @@
 #   3. Export as a NeRF-style dataset (transforms_*.json + images + FLAME params)
 #      that GaussianAvatars/train.py can consume directly.
 #
+# All three stages stream tqdm progress bars to stderr (PYTHONUNBUFFERED=1
+# is set in _common.sh so the bars render live).
+#
 # Inputs (place before running):
 #   submodules/VHAP/data/monocular/${SEQUENCE_FILE}     # e.g. obama.mp4
 #   submodules/VHAP/asset/flame/flame2023.pkl
@@ -34,7 +37,7 @@ TRACK_OUTPUT_FOLDER="output/monocular/${SEQUENCE}_${SUFFIX}"
 EXPORT_OUTPUT_FOLDER="export/monocular/${SEQUENCE}_${EXPORT_SUFFIX}"
 
 require_vhap_submodule
-activate_env "${VHAP_ENV}"
+activate_env
 
 cd "${VHAP_DIR}"
 
@@ -46,18 +49,18 @@ if [ ! -e "${INPUT_VIDEO}" ]; then
 fi
 
 log "[1/3] Preprocess (frame extraction + matting): ${INPUT_VIDEO}"
-python vhap/preprocess_video.py \
+${PYTHON} vhap/preprocess_video.py \
   --input "${INPUT_VIDEO}" \
   --matting_method robust_video_matting
 
 log "[2/3] FLAME tracking -> ${TRACK_OUTPUT_FOLDER}"
-python vhap/track.py \
+${PYTHON} vhap/track.py \
   --data.root_folder "data/monocular" \
   --exp.output_folder "${TRACK_OUTPUT_FOLDER}" \
   --data.sequence "${SEQUENCE}"
 
 log "[3/3] Export as NeRF-style dataset -> ${EXPORT_OUTPUT_FOLDER}"
-python vhap/export_as_nerf_dataset.py \
+${PYTHON} vhap/export_as_nerf_dataset.py \
   --src_folder "${TRACK_OUTPUT_FOLDER}" \
   --tgt_folder "${EXPORT_OUTPUT_FOLDER}" \
   --background-color white

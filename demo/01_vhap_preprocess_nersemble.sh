@@ -7,6 +7,8 @@
 #   2. FLAME face tracking across all 16 views.
 #   3. Export as a NeRF-style dataset that GaussianAvatars/train.py can consume.
 #
+# All three stages stream tqdm progress bars to stderr.
+#
 # Inputs (place before running):
 #   submodules/VHAP/data/nersemble/${SUBJECT}/${SEQUENCE}*  # NeRSemble raw layout
 #   submodules/VHAP/asset/flame/flame2023.pkl
@@ -33,7 +35,7 @@ TRACK_OUTPUT_FOLDER="output/nersemble/${SUBJECT}_${SEQUENCE}_${SUFFIX}"
 EXPORT_OUTPUT_FOLDER="export/nersemble/${SUBJECT}_${SEQUENCE}_${EXPORT_SUFFIX}"
 
 require_vhap_submodule
-activate_env "${VHAP_ENV}"
+activate_env
 
 cd "${VHAP_DIR}"
 
@@ -46,13 +48,13 @@ fi
 
 log "[1/3] Preprocess (frame extraction + matting): ${INPUT_GLOB}"
 # shellcheck disable=SC2086  # we want glob expansion of INPUT_GLOB
-python vhap/preprocess_video.py \
+${PYTHON} vhap/preprocess_video.py \
   --input ${INPUT_GLOB} \
   --downsample_scales 2 ${DOWNSAMPLE} \
   --matting_method background_matting_v2
 
 log "[2/3] FLAME tracking (16 views) -> ${TRACK_OUTPUT_FOLDER}"
-python vhap/track_nersemble.py \
+${PYTHON} vhap/track_nersemble.py \
   --data.root_folder "data/nersemble" \
   --exp.output_folder "${TRACK_OUTPUT_FOLDER}" \
   --data.subject "${SUBJECT}" \
@@ -60,7 +62,7 @@ python vhap/track_nersemble.py \
   --data.n_downsample_rgb "${DOWNSAMPLE}"
 
 log "[3/3] Export as NeRF-style dataset -> ${EXPORT_OUTPUT_FOLDER}"
-python vhap/export_as_nerf_dataset.py \
+${PYTHON} vhap/export_as_nerf_dataset.py \
   --src_folder "${TRACK_OUTPUT_FOLDER}" \
   --tgt_folder "${EXPORT_OUTPUT_FOLDER}" \
   --background-color white
