@@ -197,16 +197,20 @@ python -m pip install --no-deps dearpygui==2.1.4
 
 
 # ----------------------------------------------------------------------------
-# 3. nvdiffrast (source build from NVlabs HEAD).
+# 3. nvdiffrast (source build from MTamon/nvdiffrast cuda128-backface-culling).
 # ----------------------------------------------------------------------------
 # Used by mesh_renderer/__init__.py for mesh rasterisation in the viewer and
 # during training when --bind_to_mesh is on.
+#
+# Source: https://github.com/MTamon/nvdiffrast/tree/cuda128-backface-culling
+# This fork carries CUDA 12.8 / sm_120 compatibility patches plus an optional
+# back-face culling path that the GaussianAvatars mesh renderer benefits from.
 # Must be built with --no-build-isolation so it can find the already-installed torch.
-echo "[3/5] Building nvdiffrast from NVlabs HEAD"
+echo "[3/5] Building nvdiffrast from MTamon/nvdiffrast@cuda128-backface-culling"
 NVDIFFRAST_TMP="$(mktemp -d)"
 git -C "${NVDIFFRAST_TMP}" init -q
-git -C "${NVDIFFRAST_TMP}" remote add origin https://github.com/NVlabs/nvdiffrast.git
-git -C "${NVDIFFRAST_TMP}" fetch --depth 1 origin main
+git -C "${NVDIFFRAST_TMP}" remote add origin https://github.com/MTamon/nvdiffrast.git
+git -C "${NVDIFFRAST_TMP}" fetch --depth 1 origin cuda128-backface-culling
 git -C "${NVDIFFRAST_TMP}" checkout FETCH_HEAD
 python -m pip install --no-build-isolation --no-deps "${NVDIFFRAST_TMP}"
 rm -rf "${NVDIFFRAST_TMP}"
