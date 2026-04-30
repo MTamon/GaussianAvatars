@@ -91,14 +91,31 @@ nvcc --version || { echo "[setup.sh] nvcc not found on PATH"; exit 1; }
 #
 # `submodules/VHAP` is included here because the demo flow under demo/
 # depends on it; it is harmless for non-demo users (just an extra checkout).
+#
+# `--recursive` is mandatory: diff-gaussian-rasterization carries glm as a
+# nested submodule under third_party/glm, and the build fails without it
+# (cuda_rasterizer/*.h #includes <glm/glm.hpp>).
 if [ -d .git ] && [ -f .gitmodules ]; then
   for sm in diff-gaussian-rasterization simple-knn VHAP; do
     sm_path="submodules/${sm}"
     if [ ! -e "${sm_path}/.git" ]; then
-      echo "[setup.sh] auto-initialising ${sm_path}"
-      git submodule update --init "${sm_path}"
+      echo "[setup.sh] auto-initialising ${sm_path} (recursive)"
+      git submodule update --init --recursive "${sm_path}"
     fi
   done
+
+  # Repair path: top-level submodule already checked out, but its nested
+  # submodules were never pulled (e.g. user ran `git submodule update --init`
+  # without `--recursive` once, before this script auto-handled it). The
+  # canonical sentinel for diff-gaussian-rasterization is glm/glm.hpp.
+  DGR_GLM_HEADER="submodules/diff-gaussian-rasterization/third_party/glm/glm/glm.hpp"
+  if [ -e "submodules/diff-gaussian-rasterization/.git" ] \
+  && [ ! -f "${DGR_GLM_HEADER}" ]; then
+    echo "[setup.sh] glm header missing under diff-gaussian-rasterization;"
+    echo "[setup.sh]   recursively initialising its nested submodules."
+    git -C submodules/diff-gaussian-rasterization \
+      submodule update --init --recursive
+  fi
 fi
 
 
