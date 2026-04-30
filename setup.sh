@@ -108,6 +108,11 @@ if [[ ${PIP_ONLY} -eq 0 ]]; then
   if conda env list | awk '{print $1}' | grep -qx "gaussian-avatars"; then
     echo " -> conda env 'gaussian-avatars' already exists, skipping creation."
   else
+    echo "      'conda env create' is about to run. The dependency solver is"
+    echo "      typically silent for 2-10 minutes before any package downloads"
+    echo "      start. cuda-toolkit=12.8 alone is ~3 GB, so the full step often"
+    echo "      takes 10-20 minutes on a fresh machine."
+    echo "      Live-check from another shell with: ps -ef | grep -E 'conda|mamba'"
     conda env create --file environment.yml
   fi
 
