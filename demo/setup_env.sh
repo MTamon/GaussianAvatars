@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # -----------------------------------------------------------------------------
 # Unified environment installer: place GaussianAvatars + VHAP into a single
-# conda env (default: `gaussian-avatars`).
+# conda env (default: `gaussian-avatars`) AND fetch the credential-gated
+# FLAME assets needed by both projects.
 #
 # Both projects pin Python 3.11 + PyTorch 2.9.1 + CUDA 12.8 and use
 # `--no-deps` everywhere, so a sequential install is safe.
@@ -38,17 +39,20 @@
 #                migrated to mattloper@580566ea (handover doc circulated
 #                separately), both installs are bit-identical.
 #
+# FLAME assets: prompted ONCE for FLAME username/password, then handed to
+# GA's download_assets.sh (which writes flame_model/assets/flame/*.pkl).
+# The VHAP-side paths under submodules/VHAP/asset/flame/ are populated by
+# symlinking the GA copies — no second round-trip to the FLAME server.
+# Set SKIP_DOWNLOAD_ASSETS=1 to opt out (you'll have to place the .pkl
+# files yourself, see demo/README.md §0.3).
+#
 # Usage:
-#   bash demo/setup_env.sh                  # full install (no FLAME download)
-#   bash demo/setup_env.sh --skip-ga        # skip GA setup (env already built)
-#   bash demo/setup_env.sh --skip-vhap      # skip VHAP setup
-#   DOWNLOAD_ASSETS=1 bash demo/setup_env.sh
-#                                           # also run VHAP's download_assets.sh
-#                                           # (interactive: prompts for FLAME
-#                                           # username/password; populates only
-#                                           # submodules/VHAP/asset/flame/, not
-#                                           # the GA-side flame_model/assets/)
-#   GA_ENV=my-env bash demo/setup_env.sh    # override conda env name
+#   bash demo/setup_env.sh                          # full install + assets
+#   bash demo/setup_env.sh --skip-ga                # skip GA setup
+#   bash demo/setup_env.sh --skip-vhap              # skip VHAP setup
+#   SKIP_DOWNLOAD_ASSETS=1 bash demo/setup_env.sh   # do not fetch FLAME
+#   FLAME_USER=u FLAME_PASS=p bash demo/setup_env.sh   # non-interactive
+#   GA_ENV=my-env bash demo/setup_env.sh            # override conda env
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
@@ -56,12 +60,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 SKIP_GA=0
 SKIP_VHAP=0
-DOWNLOAD_ASSETS="${DOWNLOAD_ASSETS:-0}"
+SKIP_DOWNLOAD_ASSETS="${SKIP_DOWNLOAD_ASSETS:-0}"
+FLAME_USER="${FLAME_USER:-}"
+FLAME_PASS="${FLAME_PASS:-}"
 
 for arg in "$@"; do
   case "$arg" in
-    --skip-ga)   SKIP_GA=1 ;;
-    --skip-vhap) SKIP_VHAP=1 ;;
+    --skip-ga)              SKIP_GA=1 ;;
+    --skip-vhap)            SKIP_VHAP=1 ;;
+    --skip-download-assets) SKIP_DOWNLOAD_ASSETS=1 ;;
     -h|--help)
       sed -n '1,/^# ---/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
       exit 0 ;;
@@ -69,8 +76,48 @@ for arg in "$@"; do
   esac
 done
 
+prompt_flame_credentials() {
+  # Resolve credentials before any heavy work so we can fail fast and avoid
+  # leaving the user staring at a blocked prompt mid-install.
+  if [[ "${SKIP_DOWNLOAD_ASSETS}" == "1" ]]; then
+    return 0
+  fi
+
+  local ga_pkl="${REPO_ROOT}/flame_model/assets/flame/flame2023.pkl"
+  local ga_msk="${REPO_ROOT}/flame_model/assets/flame/FLAME_masks.pkl"
+  local vh_pkl="${VHAP_DIR}/asset/flame/flame2023.pkl"
+  local vh_msk="${VHAP_DIR}/asset/flame/FLAME_masks.pkl"
+
+  if [[ -f "${ga_pkl}" && -f "${ga_msk}" && -e "${vh_pkl}" && -e "${vh_msk}" ]]; then
+    log "FLAME assets already in place; skipping credential prompt."
+    SKIP_DOWNLOAD_ASSETS=1
+    return 0
+  fi
+
+  if [[ -z "${FLAME_USER}" ]]; then
+    if [[ ! -t 0 ]]; then
+      echo "[setup_env.sh] FLAME credentials needed but stdin is not a TTY." >&2
+      echo "  Re-run with FLAME_USER=... FLAME_PASS=... or SKIP_DOWNLOAD_ASSETS=1." >&2
+      exit 1
+    fi
+    read -r  -p "Username (FLAME): " FLAME_USER
+  fi
+  if [[ -z "${FLAME_PASS}" ]]; then
+    if [[ ! -t 0 ]]; then
+      echo "[setup_env.sh] FLAME password not provided and stdin is not a TTY." >&2
+      exit 1
+    fi
+    read -r -s -p "Password (FLAME): " FLAME_PASS
+    echo
+  fi
+}
+
+# Prompt up-front so the long pip install stage can run unattended after
+# credentials have been collected.
+prompt_flame_credentials
+
 if [[ ${SKIP_GA} -eq 0 ]]; then
-  log "[1/2] Installing GaussianAvatars stack into env '${GA_ENV}'"
+  log "[1/3] Installing GaussianAvatars stack into env '${GA_ENV}'"
   cd "${REPO_ROOT}"
   # GA's setup.sh now auto-initialises submodules (including VHAP) when
   # they're missing, so a separate `git submodule update --init` is no
@@ -92,24 +139,45 @@ source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate "${GA_ENV}"
 
 if [[ ${SKIP_VHAP} -eq 0 ]]; then
-  log "[2/2] Adding VHAP stack into the same env (--pip-only)"
+  log "[2/3] Adding VHAP stack into the same env (--pip-only)"
   cd "${VHAP_DIR}"
-  vhap_args=( --pip-only )
-  if [[ "${DOWNLOAD_ASSETS}" != "1" ]]; then
-    # Default: skip VHAP's download_assets.sh because it prompts for FLAME
-    # credentials interactively and only populates the VHAP-side asset
-    # directory anyway. README §0.3 documents manual placement for both
-    # projects (a single download + symlink covers both).
-    vhap_args+=( --no-assets )
-  fi
-  ENV_NAME="${GA_ENV}" bash setup.sh "${vhap_args[@]}"
+  # Always pass --no-assets here; we fetch FLAME assets centrally in step
+  # [3/3] and symlink into the VHAP tree, avoiding a duplicate FLAME-server
+  # round-trip.
+  ENV_NAME="${GA_ENV}" bash setup.sh --pip-only --no-assets
+fi
+
+if [[ "${SKIP_DOWNLOAD_ASSETS}" != "1" ]]; then
+  log "[3/3] Fetching FLAME assets (single credential set covers both projects)"
+  cd "${REPO_ROOT}"
+  bash download_assets.sh \
+    --flame_user "${FLAME_USER}" \
+    --flame_pass "${FLAME_PASS}"
+
+  # Mirror the GA-side .pkl files into the VHAP asset/flame directory.
+  # We use symlinks rather than copies so disk usage stays single-counted
+  # and any future re-download via download_assets.sh stays in sync.
+  log "    Linking VHAP asset/flame/* to the GA copies"
+  mkdir -p "${VHAP_DIR}/asset/flame"
+  for f in flame2023.pkl FLAME_masks.pkl; do
+    src="${REPO_ROOT}/flame_model/assets/flame/${f}"
+    dst="${VHAP_DIR}/asset/flame/${f}"
+    if [[ -f "${src}" ]]; then
+      ln -sf "${src}" "${dst}"
+      echo "    ${dst} -> ${src}"
+    else
+      echo "    [WARN] ${src} missing; cannot link ${dst}" >&2
+    fi
+  done
+else
+  log "[3/3] SKIP_DOWNLOAD_ASSETS=1 — skipping FLAME asset fetch."
 fi
 
 log "Done. Both stacks share env '${GA_ENV}'."
 log "Next steps:"
-if [[ "${DOWNLOAD_ASSETS}" != "1" ]]; then
-  log "  1. Place FLAME assets (see demo/README.md §0.3)"
+if [[ "${SKIP_DOWNLOAD_ASSETS}" == "1" ]]; then
+  log "  0. Place FLAME assets manually (see demo/README.md §0.3)"
 fi
-log "  2. bash demo/01_vhap_preprocess_monocular.sh   (or *_nersemble.sh)"
-log "  3. bash demo/02_train.sh"
-log "  4. bash demo/03_render.sh"
+log "  1. bash demo/01_vhap_preprocess_monocular.sh   (or *_nersemble.sh)"
+log "  2. bash demo/02_train.sh"
+log "  3. bash demo/03_render.sh"

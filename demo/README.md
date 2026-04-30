@@ -84,29 +84,52 @@ env 名を変えたい場合:
 GA_ENV=my-env bash demo/setup_env.sh
 ```
 
-### 0.3 FLAME アセット
+### 0.3 FLAME アセット (デフォルトで自動ダウンロード)
 
-VHAP と GaussianAvatars がそれぞれ独立に FLAME 2023 を必要とします。
-[FLAME 公式サイト](https://flame.is.tue.mpg.de/download.php) からダウンロードし、
-以下の 2 箇所に配置してください（シンボリックリンクで重複を避けても OK）。
+VHAP と GaussianAvatars はそれぞれ FLAME 2023 を必要とします:
 
 | ファイル | GaussianAvatars 側 | VHAP 側 |
 | --- | --- | --- |
 | FLAME 2023 | `flame_model/assets/flame/flame2023.pkl` | `submodules/VHAP/asset/flame/flame2023.pkl` |
 | FLAME masks | `flame_model/assets/flame/FLAME_masks.pkl` | `submodules/VHAP/asset/flame/FLAME_masks.pkl` |
 
-#### (任意) VHAP の `download_assets.sh` を経由する場合
+**`bash demo/setup_env.sh` を実行すると、FLAME のユーザー名/パスワードを
+1度だけ対話で聞かれ、両方の場所に配置されます** (GA 側にダウンロード →
+VHAP 側はそこへの symlink)。FLAME サーバーへの問い合わせは1回だけです。
 
-FLAME のアカウントを持っているなら、VHAP 側だけは自動ダウンロードできます:
+非対話で実行したい場合は環境変数で渡せます:
 
 ```shell
-DOWNLOAD_ASSETS=1 bash demo/setup_env.sh
+FLAME_USER='you@example.com' FLAME_PASS='...' bash demo/setup_env.sh
 ```
 
-→ 実行時に FLAME ユーザー名/パスワードが対話プロンプトで聞かれ、
-`submodules/VHAP/asset/flame/{flame2023,FLAME_masks}.pkl` が配置されます。
-GA 側 (`flame_model/assets/flame/`) は別途、上記2ファイルを `cp` か
-`ln -s` で配置する必要があります。
+#### スキップしたい場合
+
+すでにアセットを持っている、または FLAME アカウントが無い場合:
+
+```shell
+SKIP_DOWNLOAD_ASSETS=1 bash demo/setup_env.sh
+```
+
+その場合は手動で上の表の2箇所に flame2023.pkl / FLAME_masks.pkl を配置してください。
+[FLAME 公式サイト](https://flame.is.tue.mpg.de/download.php) からダウンロードできます。
+
+#### スタンドアロン実行
+
+env 構築とは独立にアセットだけ取得することもできます:
+
+```shell
+# GA 側
+bash download_assets.sh                                 # 対話
+bash download_assets.sh --flame_user U --flame_pass P   # 非対話
+
+# VHAP 側
+bash submodules/VHAP/download_assets.sh                 # 同じ I/F
+```
+
+GA の `download_assets.sh` は、VHAP 側に既にファイルがある場合は **symlink で
+再利用** し、ダウンロードを省略します（その逆方向は VHAP の `download_assets.sh`
+は対応していないため、`demo/setup_env.sh` 内で明示的に symlink を作っています）。
 
 ---
 
