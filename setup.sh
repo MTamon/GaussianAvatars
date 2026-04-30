@@ -176,6 +176,7 @@ PY
 python -m pip install --no-deps filelock==3.20.0
 python -m pip install --no-deps fsspec==2025.10.0
 python -m pip install --no-deps iopath==0.1.10
+python -m pip install --no-deps portalocker==3.2.0
 python -m pip install --no-deps ninja==1.13.0
 python -m pip install --no-deps numpy==2.2.6
 python -m pip install --no-deps nvidia-cublas-cu12==12.8.4.1
@@ -250,7 +251,7 @@ python -m pip install --no-deps markdown-it-py==3.0.0
 python -m pip install --no-deps typeguard==4.4.2
 python -m pip install --no-deps tyro==0.9.13
 # dearpygui -- viewer UI in local_viewer.py / remote_viewer.py.
-python -m pip install --no-deps dearpygui==2.1.4
+python -m pip install --no-deps dearpygui==2.1.1
 
 
 # ----------------------------------------------------------------------------
