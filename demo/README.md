@@ -33,13 +33,17 @@ demo/
 
 ## 0. 前提条件
 
-### 0.1 リポジトリと submodule の取得
+### 0.1 リポジトリの取得
 
 ```shell
 git clone <this repo>
 cd GaussianAvatars
-git submodule update --init --recursive
 ```
+
+> submodule (`submodules/{simple-knn, diff-gaussian-rasterization, VHAP}`)
+> は `bash setup.sh` の Step [0/5] で**自動初期化**されます。明示的に
+> `git submodule update --init --recursive` を実行しても OK ですが、
+> 必須ではありません。
 
 ### 0.2 統合 conda 環境を 1 つ作成
 
@@ -53,38 +57,79 @@ bash demo/setup_env.sh
 
 内部的には:
 
-1. `bash setup.sh` — conda env `gaussian-avatars` を作成し GA スタックを導入
+1. `bash setup.sh` — submodule auto-init → conda env `gaussian-avatars` 作成 → GA スタックを導入
 2. `conda activate gaussian-avatars`
 3. `bash submodules/VHAP/setup.sh --pip-only --no-assets` — 同じ env に VHAP スタックを追加
 
-衝突する 3 パッケージは GA → VHAP の順インストールにより VHAP の pin が
-後勝ちで採用されます (詳細は `demo/setup_env.sh` 冒頭コメント参照):
+#### 衝突パッケージの解決方針
 
-| パッケージ | GA pin | VHAP pin | 結果 (env内) | 影響 |
+GA → VHAP の順インストールで VHAP の pin が後勝ちになります。**これは
+デモ用途では正しい挙動**です（`demo/setup_env.sh` 冒頭コメントに根拠あり）:
+
+| パッケージ | GA pin | VHAP pin | 結果 | デモ・本体への影響 |
 | --- | --- | --- | --- | --- |
-| tyro | 0.9.13 | 0.8.14 | **0.8.14** | 両者の `tyro.cli(dataclass)` は 0.8/0.9 で互換、影響なし |
-| dearpygui | 2.1.4 | 1.11.1 | **1.11.1** | デモ非依存。viewer を使う場合のみ要注意 |
-| chumpy | mattloper master (git) | (VHAPの実装による) | VHAPに依存 | `import chumpy` + `chumpy.Ch` が機能すればOK |
+| tyro | 0.9.13 | 0.8.14 | **0.8.14** | デモはVHAP CLIスクリプト (track*.py 等) を呼ぶので0.8.14が正解。GA train.py/render.py は argparse 使用で tyro 非依存 |
+| dearpygui | 2.1.4 | 1.11.1 | **1.11.1** | デモは viewer 非依存。VHAP の flame_viewer/flame_editor が動くメリットあり |
+| chumpy | mattloper@`580566ea` (0.71) | (VHAP実装に依存) | バージョン報告は **0.71 で一致** | FLAME pickle deserialize 用途で同等 |
 
-特定パッケージだけ別バージョンにしたい場合は env を活性化したあとに
-`pip install --no-deps <pkg>==<ver>` で上書きしてください。
+個別 override は env を活性化後に:
+```shell
+conda activate gaussian-avatars
+pip install --no-deps tyro==0.9.13       # 例: GAのviewerで0.9機能を使いたい
+pip install --no-deps dearpygui==2.1.4   # 例: GAのviewerで2.x機能を使いたい
+```
 
-env 名を変えたい場合は `GA_ENV` を export してください。
-
+env 名を変えたい場合:
 ```shell
 GA_ENV=my-env bash demo/setup_env.sh
 ```
 
-### 0.3 FLAME アセット
+### 0.3 FLAME アセット (デフォルトで自動ダウンロード)
 
-VHAP と GaussianAvatars がそれぞれ独立に FLAME 2023 を必要とします。
-[FLAME 公式サイト](https://flame.is.tue.mpg.de/download.php) からダウンロードし、
-以下の 2 箇所に配置してください（シンボリックリンクで重複を避けても OK）。
+VHAP と GaussianAvatars はそれぞれ FLAME 2023 を必要とします:
 
 | ファイル | GaussianAvatars 側 | VHAP 側 |
 | --- | --- | --- |
 | FLAME 2023 | `flame_model/assets/flame/flame2023.pkl` | `submodules/VHAP/asset/flame/flame2023.pkl` |
 | FLAME masks | `flame_model/assets/flame/FLAME_masks.pkl` | `submodules/VHAP/asset/flame/FLAME_masks.pkl` |
+
+**`bash demo/setup_env.sh` を実行すると、FLAME のユーザー名/パスワードを
+1度だけ対話で聞かれ、両方の場所に配置されます** (GA 側にダウンロード →
+VHAP 側はそこへの symlink)。FLAME サーバーへの問い合わせは1回だけです。
+
+非対話で実行したい場合は環境変数で渡せます:
+
+```shell
+FLAME_USER='you@example.com' FLAME_PASS='...' bash demo/setup_env.sh
+```
+
+#### スキップしたい場合
+
+すでにアセットを持っている、または FLAME アカウントが無い場合:
+
+```shell
+SKIP_DOWNLOAD_ASSETS=1 bash demo/setup_env.sh
+```
+
+その場合は手動で上の表の2箇所に flame2023.pkl / FLAME_masks.pkl を配置してください。
+[FLAME 公式サイト](https://flame.is.tue.mpg.de/download.php) からダウンロードできます。
+
+#### スタンドアロン実行
+
+env 構築とは独立にアセットだけ取得することもできます:
+
+```shell
+# GA 側
+bash download_assets.sh                                 # 対話
+bash download_assets.sh --flame_user U --flame_pass P   # 非対話
+
+# VHAP 側
+bash submodules/VHAP/download_assets.sh                 # 同じ I/F
+```
+
+GA の `download_assets.sh` は、VHAP 側に既にファイルがある場合は **symlink で
+再利用** し、ダウンロードを省略します（その逆方向は VHAP の `download_assets.sh`
+は対応していないため、`demo/setup_env.sh` 内で明示的に symlink を作っています）。
 
 ---
 

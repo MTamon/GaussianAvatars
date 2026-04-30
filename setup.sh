@@ -82,6 +82,26 @@ echo "[setup.sh] TORCH_CUDA_ARCH_LIST=${TORCH_CUDA_ARCH_LIST}"
 nvcc --version || { echo "[setup.sh] nvcc not found on PATH"; exit 1; }
 
 
+# ----------------------------------------------------------------------------
+# 0. Auto-initialise git submodules.
+# ----------------------------------------------------------------------------
+# Conservative auto-init: only touch a submodule whose working tree has no
+# .git entry yet. Already-checked-out submodules — including any user WIP
+# inside them — are left alone.
+#
+# `submodules/VHAP` is included here because the demo flow under demo/
+# depends on it; it is harmless for non-demo users (just an extra checkout).
+if [ -d .git ] && [ -f .gitmodules ]; then
+  for sm in diff-gaussian-rasterization simple-knn VHAP; do
+    sm_path="submodules/${sm}"
+    if [ ! -e "${sm_path}/.git" ]; then
+      echo "[setup.sh] auto-initialising ${sm_path}"
+      git submodule update --init "${sm_path}"
+    fi
+  done
+fi
+
+
 if [[ ${PIP_ONLY} -eq 0 ]]; then
   echo "[1/5] Creating conda env gaussian-avatars (Python 3.11, CUDA 12.8 toolkit)"
 
@@ -244,8 +264,8 @@ rm -rf "${NVDIFFRAST_TMP}"
 echo "[4/5] Building local CUDA extensions (diff-gaussian-rasterization, simple-knn)"
 
 if [ ! -f submodules/diff-gaussian-rasterization/setup.py ] || [ ! -f submodules/simple-knn/setup.py ]; then
-  echo "[setup.sh] submodules not initialized."
-  echo "[setup.sh] Run: git submodule update --init --recursive"
+  echo "[setup.sh] submodules still missing after step [0/5] auto-init." >&2
+  echo "[setup.sh] Inspect submodules/* and run: git submodule update --init --recursive" >&2
   exit 1
 fi
 
