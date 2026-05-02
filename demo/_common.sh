@@ -16,6 +16,7 @@ set -eo pipefail
 DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${DEMO_DIR}/.." && pwd)"
 VHAP_DIR="${REPO_ROOT}/submodules/VHAP"
+DEMO_CACHE_DIR="${REPO_ROOT}/.cache/demo"
 
 # Single unified conda env. Demo entrypoints also expose --env for explicit
 # per-run selection; GA_ENV remains as a low-level fallback for compatibility.
@@ -26,6 +27,29 @@ GA_ENV="${GA_ENV:-gaussian-avatars}"
 # nohup/tee/CI runners. PYTHON is the canonical interpreter shim used below.
 export PYTHONUNBUFFERED=1
 PYTHON="python -u"
+
+# Keep demo-generated caches and temporary files inside the repository. This
+# covers torch.hub downloads, PyTorch extension builds, matplotlib/font caches,
+# joblib temp files, and generic Python/native temporary files used by VHAP.
+mkdir -p \
+  "${DEMO_CACHE_DIR}/xdg" \
+  "${DEMO_CACHE_DIR}/torch" \
+  "${DEMO_CACHE_DIR}/torch_extensions" \
+  "${DEMO_CACHE_DIR}/matplotlib" \
+  "${DEMO_CACHE_DIR}/huggingface" \
+  "${DEMO_CACHE_DIR}/numba" \
+  "${DEMO_CACHE_DIR}/nv_cuda" \
+  "${DEMO_CACHE_DIR}/joblib" \
+  "${DEMO_CACHE_DIR}/tmp"
+export XDG_CACHE_HOME="${DEMO_CACHE_DIR}/xdg"
+export TORCH_HOME="${DEMO_CACHE_DIR}/torch"
+export TORCH_EXTENSIONS_DIR="${DEMO_CACHE_DIR}/torch_extensions"
+export MPLCONFIGDIR="${DEMO_CACHE_DIR}/matplotlib"
+export HF_HOME="${DEMO_CACHE_DIR}/huggingface"
+export NUMBA_CACHE_DIR="${DEMO_CACHE_DIR}/numba"
+export CUDA_CACHE_PATH="${DEMO_CACHE_DIR}/nv_cuda"
+export JOBLIB_TEMP_FOLDER="${DEMO_CACHE_DIR}/joblib"
+export TMPDIR="${DEMO_CACHE_DIR}/tmp"
 
 activate_env() {
   local env_name="${1:-${GA_ENV}}"

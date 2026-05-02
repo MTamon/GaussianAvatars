@@ -144,6 +144,11 @@ case "${DIVISION_MODE}" in
   *) die_usage "$(basename "$0")" "--division-mode must be one of: random_single, random_group, last" ;;
 esac
 
+TRACK_REUSE_ARGS=()
+if (( SKIP_EXISTING == 0 )); then
+  TRACK_REUSE_ARGS+=(--exp.no-reuse-landmarks)
+fi
+
 # Subject names with underscores would collide with combine_nerf_datasets.py's
 # subject prefix assertion (it splits on '_' and takes [0]).
 if [[ "${SUBJECT}" == *"_"* ]]; then
@@ -300,6 +305,7 @@ run_track_one_clip() {
       --data.sequence "${stem}" \
       --data.landmark-detector-njobs "${LANDMARK_NJOBS}" \
       --batch-size "${BATCH_SIZE}" \
+      "${TRACK_REUSE_ARGS[@]}" \
       "${extra_args[@]}"
   fi
 

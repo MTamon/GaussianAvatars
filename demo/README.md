@@ -192,7 +192,7 @@ bash demo/01_vhap_preprocess_nersemble.sh --subject 074 --sequence EMO-1
 | `--downsample` | `4` | NeRSemble: 画像ダウンサンプル倍率 |
 | `--suffix` / `--export-suffix` | (派生名) | 出力フォルダ名のサフィックス |
 | `--batch-size` | `16` | 単眼 VHAP tracking のフレーム batch size。保守的にしたい場合は `1` |
-| `--no-skip-existing` | off | 既存の完成済み成果物があっても単眼 VHAP 前処理を再実行 |
+| `--no-skip-existing` | off | 既存成果物と VHAP landmark cache を再利用せず単眼 VHAP 前処理を再実行 |
 
 ### 1c. 同条件で撮った複数単眼テイクを 1 つのデータセットへ
 
@@ -305,7 +305,7 @@ submodules/VHAP/export/monocular/subj01_UNION6_whiteBg_staticOffset_maskBelowLin
 | `--division-mode` | `last` | `random_single` / `random_group` / `last` から 1 つを test に hold-out |
 | `--suffix` / `--export-suffix` | (派生名) | 既存スクリプトと同じ命名規則 |
 | `--batch-size` | `16` | VHAP tracking のフレーム batch size。保守的にしたい場合は `1` |
-| `--no-skip-existing` | off | 既存の完成済み成果物があっても全ステージを再実行 |
+| `--no-skip-existing` | off | 既存成果物と VHAP landmark cache を再利用せず全ステージを再実行 |
 
 > **NOTE:** `--subject` の値が `_` を含むと、`vhap/combine_nerf_datasets.py` の
 > 被験者一致 assert (`split('_')[0]` で先頭トークンを比較) を満たせなくなります。
@@ -404,6 +404,10 @@ bash demo/03_render.sh \
 ## トラブルシューティング
 
 - **`conda env 'gaussian-avatars' not found`**: `bash demo/setup_env.sh` を未実行。
+- **キャッシュがホームディレクトリに出る**: demo スクリプトは `XDG_CACHE_HOME`,
+  `TORCH_HOME`, `MPLCONFIGDIR`, `TORCH_EXTENSIONS_DIR`, `TMPDIR` などを
+  リポジトリ内 `.cache/demo/` に固定します。既に別のシェルで起動済みの処理には
+  反映されないため、再実行してください。
 - **tqdm バーが表示されない**: 出力をパイプ/ファイルにリダイレクトしている場合、
   tqdm はコンパクトモードに切り替わります。素のターミナルで実行するか、
   `script -q -c "bash demo/02_train.sh" /tmp/log.txt` のように pty を介すと

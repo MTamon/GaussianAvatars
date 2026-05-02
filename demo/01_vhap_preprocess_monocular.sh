@@ -84,6 +84,11 @@ done
 [[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 SEQUENCE="${SEQUENCE:-${SEQUENCE_FILE%.*}}"
 
+TRACK_REUSE_ARGS=()
+if (( SKIP_EXISTING == 0 )); then
+  TRACK_REUSE_ARGS+=(--exp.no-reuse-landmarks)
+fi
+
 TRACK_OUTPUT_FOLDER="output/monocular/${SEQUENCE}_${SUFFIX}"
 EXPORT_OUTPUT_FOLDER="export/monocular/${SEQUENCE}_${EXPORT_SUFFIX}"
 
@@ -145,7 +150,8 @@ else
     --exp.output_folder "${TRACK_OUTPUT_FOLDER}" \
     --data.sequence "${SEQUENCE}" \
     --data.landmark-detector-njobs "${LANDMARK_NJOBS}" \
-    --batch-size "${BATCH_SIZE}"
+    --batch-size "${BATCH_SIZE}" \
+    "${TRACK_REUSE_ARGS[@]}"
 fi
 
 if (( SKIP_EXISTING == 1 )) && export_complete; then
