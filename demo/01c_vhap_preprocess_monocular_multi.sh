@@ -14,8 +14,8 @@
 #
 #   Phase B (every other clip):
 #     1. Frame extraction + matting
-#     2. FLAME tracking with --load_globals_only --freeze_globals_from_init
-#        and --model.flame_params_path pointing at Phase A's npz, so per-clip
+#     2. FLAME tracking with --load-globals-only --freeze-globals-from-init
+#        and --model.flame-params-path pointing at Phase A's npz, so per-clip
 #        rotation / translation / pose / expression are optimised against the
 #        same global identity / texture / lighting / focal length.
 #     3. Export as NeRF-style dataset
@@ -61,6 +61,8 @@ SEQUENCE_FILES=()
 SUFFIX="whiteBg_staticOffset"
 EXPORT_SUFFIX="whiteBg_staticOffset_maskBelowLine"
 DIVISION_MODE="last"
+BATCH_SIZE="16"
+SKIP_EXISTING=1
 
 usage() {
   cat <<'USAGE'
@@ -92,6 +94,9 @@ Options:
   --division-mode MODE       Passed to combine_nerf_datasets.py.
                              One of: random_single, random_group, last
                              (default: last)
+  --batch-size N             VHAP tracking frame batch size (default: 16).
+                             Use 1 for the original conservative tracking behavior.
+  --no-skip-existing         Re-run all stages even if completed outputs already exist.
   --env NAME                 Conda env to activate (default: gaussian-avatars)
   -h, --help                 Show this help
 USAGE
@@ -105,6 +110,8 @@ while [[ $# -gt 0 ]]; do
     --suffix) require_option_value "$(basename "$0")" "$1" "$#"; SUFFIX="$2"; shift 2 ;;
     --export-suffix) require_option_value "$(basename "$0")" "$1" "$#"; EXPORT_SUFFIX="$2"; shift 2 ;;
     --division-mode) require_option_value "$(basename "$0")" "$1" "$#"; DIVISION_MODE="$2"; shift 2 ;;
+    --batch-size) require_option_value "$(basename "$0")" "$1" "$#"; BATCH_SIZE="$2"; shift 2 ;;
+    --no-skip-existing) SKIP_EXISTING=0; shift ;;
     --env) require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
     *) die_usage "$(basename "$0")" "unknown option: $1" ;;
@@ -116,6 +123,7 @@ done
 (( ${#SEQUENCE_FILES[@]} >= 1 )) || die_usage "$(basename "$0")" "at least one --sequence-file is required"
 [[ -n "${SUFFIX}" ]] || die_usage "$(basename "$0")" "--suffix requires a value"
 [[ -n "${EXPORT_SUFFIX}" ]] || die_usage "$(basename "$0")" "--export-suffix requires a value"
+[[ "${BATCH_SIZE}" =~ ^[1-9][0-9]*$ ]] || die_usage "$(basename "$0")" "--batch-size must be a positive integer"
 [[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 
 case "${DIVISION_MODE}" in
@@ -208,6 +216,48 @@ NUM_CLIPS=${#SEQUENCE_FILES[@]}
 COMBINED_NAME="${SUBJECT}_UNION${NUM_CLIPS}_${EXPORT_SUFFIX}"
 COMBINED_FOLDER="export/monocular/${COMBINED_NAME}"
 
+has_matching_file() {
+  local dir="$1"
+  local pattern="$2"
+  find "${dir}" -maxdepth 1 -type f -name "${pattern}" -print -quit 2>/dev/null | grep -q .
+}
+
+preprocess_complete() {
+  local input_video="$1"
+  local sequence_dir="${input_video%.*}"
+  has_matching_file "${sequence_dir}/images" "*.jpg" &&
+    has_matching_file "${sequence_dir}/alpha_maps" "*.jpg"
+}
+
+latest_track_npz() {
+  local track_out="$1"
+  [ -d "${track_out}" ] || return 0
+  find "${track_out}" -mindepth 2 -maxdepth 2 -type f -name "tracked_flame_params*.npz" 2>/dev/null | sort -V | tail -n 1
+}
+
+track_complete() {
+  local track_out="$1"
+  [ -n "$(latest_track_npz "${track_out}")" ]
+}
+
+export_complete() {
+  local export_out="$1"
+  [ -f "${export_out}/transforms.json" ] &&
+    [ -f "${export_out}/transforms_train.json" ] &&
+    [ -f "${export_out}/transforms_val.json" ] &&
+    [ -f "${export_out}/transforms_test.json" ] &&
+    [ -f "${export_out}/canonical_flame_param.npz" ]
+}
+
+combined_complete() {
+  [ -f "${COMBINED_FOLDER}/transforms_train.json" ] &&
+    [ -f "${COMBINED_FOLDER}/transforms_val.json" ] &&
+    [ -f "${COMBINED_FOLDER}/transforms_test.json" ] &&
+    [ -f "${COMBINED_FOLDER}/canonical_flame_param.npz" ] &&
+    [ -f "${COMBINED_FOLDER}/sequences_trainval.txt" ] &&
+    [ -f "${COMBINED_FOLDER}/sequences_test.txt" ]
+}
+
 run_track_one_clip() {
   local stem="$1"
   local input_video="$2"
@@ -218,23 +268,36 @@ run_track_one_clip() {
   local track_out="output/monocular/${sequence}_${SUFFIX}"
   local export_out="export/monocular/${sequence}_${EXPORT_SUFFIX}"
 
-  log "  preprocess ${input_video}"
-  ${PYTHON} vhap/preprocess_video.py \
-    --input "${input_video}" \
-    --matting_method robust_video_matting
+  if (( SKIP_EXISTING == 1 )) && preprocess_complete "${input_video}"; then
+    log "  skip preprocess ${input_video}"
+  else
+    log "  preprocess ${input_video}"
+    ${PYTHON} vhap/preprocess_video.py \
+      --input "${input_video}" \
+      --matting_method robust_video_matting
+  fi
 
-  log "  FLAME tracking -> ${track_out}"
-  ${PYTHON} vhap/track.py \
-    --data.root_folder "${data_root}" \
-    --exp.output_folder "${track_out}" \
-    --data.sequence "${stem}" \
-    "${extra_args[@]}"
+  if (( SKIP_EXISTING == 1 )) && track_complete "${track_out}"; then
+    log "  skip FLAME tracking; found $(latest_track_npz "${track_out}")"
+  else
+    log "  FLAME tracking -> ${track_out}"
+    ${PYTHON} vhap/track.py \
+      --data.root_folder "${data_root}" \
+      --exp.output_folder "${track_out}" \
+      --data.sequence "${stem}" \
+      --batch-size "${BATCH_SIZE}" \
+      "${extra_args[@]}"
+  fi
 
-  log "  export -> ${export_out}"
-  ${PYTHON} vhap/export_as_nerf_dataset.py \
-    --src_folder "${track_out}" \
-    --tgt_folder "${export_out}" \
-    --background-color white
+  if (( SKIP_EXISTING == 1 )) && export_complete "${export_out}"; then
+    log "  skip export; NeRF-style dataset already exists at ${export_out}"
+  else
+    log "  export -> ${export_out}"
+    ${PYTHON} vhap/export_as_nerf_dataset.py \
+      --src_folder "${track_out}" \
+      --tgt_folder "${export_out}" \
+      --background-color white
+  fi
 
   # Echo the per-clip export folder name so the caller can collect it.
   echo "${export_out}"
@@ -244,7 +307,7 @@ run_track_one_clip() {
 # writes results into <track_out>/<TIMESTAMP>/tracked_flame_params_<epoch>.npz,
 # and export_as_nerf_dataset.py's load_config picks the latest timestamp via
 # `sorted(src_folder.iterdir())[-1]` — we mirror that here so the value we pass
-# into Phase B as --model.flame_params_path is unambiguous.
+# into Phase B as --model.flame-params-path is unambiguous.
 resolve_pass_a_npz() {
   local stem="$1"
   local sequence="${SUBJECT}_${stem}"
@@ -266,6 +329,13 @@ resolve_pass_a_npz() {
 
   echo "${latest_npz}"
 }
+
+if (( SKIP_EXISTING == 1 )) && combined_complete; then
+  log "Skip all phases; combined dataset already exists at ${COMBINED_FOLDER}"
+  log "Done. Pass this path to demo/02_train.sh:"
+  echo "    bash demo/02_train.sh --source-path \"${VHAP_DIR}/${COMBINED_FOLDER}\""
+  exit 0
+fi
 
 # ----------------------------------------------------------------------------
 # Phase A: shape source clip — full-parameter tracking.
@@ -302,9 +372,9 @@ for sf in "${RESOLVED_SEQUENCE_FILES[@]}"; do
 
   log "  -> clip ${stem_b}"
   clip_export=$(run_track_one_clip "${stem_b}" "${sf}" "$(dirname "${sf}")" \
-    --model.flame_params_path "${PASS_A_NPZ}" \
-    --load_globals_only \
-    --freeze_globals_from_init | tail -n 1)
+    --model.flame-params-path "${PASS_A_NPZ}" \
+    --load-globals-only \
+    --freeze-globals-from-init | tail -n 1)
   EXPORT_FOLDERS+=("${clip_export}")
 done
 
