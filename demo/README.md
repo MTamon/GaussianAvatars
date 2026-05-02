@@ -404,10 +404,10 @@ bash demo/03_render.sh \
 ## トラブルシューティング
 
 - **`conda env 'gaussian-avatars' not found`**: `bash demo/setup_env.sh` を未実行。
-- **キャッシュがホームディレクトリに出る**: demo スクリプトは `XDG_CACHE_HOME`,
-  `TORCH_HOME`, `MPLCONFIGDIR`, `TORCH_EXTENSIONS_DIR`, `TMPDIR` などを
-  リポジトリ内 `.cache/demo/` に固定します。既に別のシェルで起動済みの処理には
-  反映されないため、再実行してください。
+- **一時ファイルがホームディレクトリに出る**: demo スクリプトは `TMPDIR` と
+  `JOBLIB_TEMP_FOLDER` をリポジトリ内 `.cache/tmp/` に固定します。`torch.hub`
+  などのモデルダウンロード cache は通常どおりユーザー cache 配下を使います。
+  既に別のシェルで起動済みの処理には反映されないため、再実行してください。
 - **tqdm バーが表示されない**: 出力をパイプ/ファイルにリダイレクトしている場合、
   tqdm はコンパクトモードに切り替わります。素のターミナルで実行するか、
   `script -q -c "bash demo/02_train.sh" /tmp/log.txt` のように pty を介すと
