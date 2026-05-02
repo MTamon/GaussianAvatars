@@ -21,6 +21,11 @@ demo/
 **前処理・学習・レンダリングそれぞれの段階で tqdm のプログレスバーが
 リアルタイムで表示されます**（FPS / iter / ETA が見えます）。
 
+デモスクリプトの実行パラメータは `--source-path` や `--iterations` のような
+CLI オプションで渡します。環境変数はシェルセッションや上位のジョブランナーから
+意図せず継承されることがあるため、データパスやイテレーション数の指定には
+使わない方針です。
+
 | 段階 | プログレスバー実装 |
 | --- | --- |
 | 前処理 (matting / extraction) | `submodules/VHAP/vhap/preprocess_video.py:66,120,141` |
@@ -81,7 +86,7 @@ pip install --no-deps dearpygui==2.1.4   # 例: GAのviewerで2.x機能を使い
 
 env 名を変えたい場合:
 ```shell
-GA_ENV=my-env bash demo/setup_env.sh
+bash demo/setup_env.sh --env my-env
 ```
 
 ### 0.3 FLAME アセット (デフォルトで自動ダウンロード)
@@ -97,10 +102,10 @@ VHAP と GaussianAvatars はそれぞれ FLAME 2023 を必要とします:
 1度だけ対話で聞かれ、両方の場所に配置されます** (GA 側にダウンロード →
 VHAP 側はそこへの symlink)。FLAME サーバーへの問い合わせは1回だけです。
 
-非対話で実行したい場合は環境変数で渡せます:
+非対話で実行したい場合は CLI オプションで渡せます:
 
 ```shell
-FLAME_USER='you@example.com' FLAME_PASS='...' bash demo/setup_env.sh
+bash demo/setup_env.sh --flame-user 'you@example.com' --flame-pass '...'
 ```
 
 #### スキップしたい場合
@@ -108,7 +113,7 @@ FLAME_USER='you@example.com' FLAME_PASS='...' bash demo/setup_env.sh
 すでにアセットを持っている、または FLAME アカウントが無い場合:
 
 ```shell
-SKIP_DOWNLOAD_ASSETS=1 bash demo/setup_env.sh
+bash demo/setup_env.sh --skip-download-assets
 ```
 
 その場合は手動で上の表の2箇所に flame2023.pkl / FLAME_masks.pkl を配置してください。
@@ -147,7 +152,7 @@ mkdir -p submodules/VHAP/data/monocular
 cp /path/to/obama.mp4 submodules/VHAP/data/monocular/
 
 # 2. 前処理 → トラッキング → NeRF 形式エクスポート
-SEQUENCE_FILE=obama.mp4 bash demo/01_vhap_preprocess_monocular.sh
+bash demo/01_vhap_preprocess_monocular.sh --sequence-file obama.mp4
 ```
 
 出力:
@@ -169,52 +174,52 @@ submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine/
 #    submodules/VHAP/data/nersemble/074/EMO-1/...
 
 # 2. 16 ビュー一括前処理 → トラッキング → エクスポート
-SUBJECT=074 SEQUENCE=EMO-1 bash demo/01_vhap_preprocess_nersemble.sh
+bash demo/01_vhap_preprocess_nersemble.sh --subject 074 --sequence EMO-1
 ```
 
 複数シーケンスを 1 つのデータセットに結合したい場合は、VHAP の
 `vhap/combine_nerf_datasets.py` を直接実行してください
 （`submodules/VHAP/doc/nersemble.md` Step 4 参照）。
 
-### 主な環境変数
+### 主な CLI オプション
 
-| 変数 | デフォルト | 用途 |
+| オプション | デフォルト | 用途 |
 | --- | --- | --- |
-| `SEQUENCE_FILE` | `obama.mp4` | 単眼: 入力動画ファイル名 |
-| `SEQUENCE` | `${SEQUENCE_FILE%.*}` (mono) / `EMO-1` (nersemble) | シーケンス名 |
-| `SUBJECT` | `074` | NeRSemble の subject ID |
-| `DOWNSAMPLE` | `4` | NeRSemble: 画像ダウンサンプル倍率 |
-| `SUFFIX` / `EXPORT_SUFFIX` | (派生名) | 出力フォルダ名のサフィックス |
+| `--sequence-file` | `obama.mp4` | 単眼: 入力動画ファイル名 |
+| `--sequence` | `<sequence-file の stem>` (mono) / `EMO-1` (nersemble) | シーケンス名 |
+| `--subject` | `074` | NeRSemble の subject ID |
+| `--downsample` | `4` | NeRSemble: 画像ダウンサンプル倍率 |
+| `--suffix` / `--export-suffix` | (派生名) | 出力フォルダ名のサフィックス |
 
 ---
 
 ## 2. GaussianAvatars 学習デモ
 
-`SOURCE_PATH` に Step 1 の export フォルダの **絶対パス** を渡します。
+`--source-path` に Step 1 の export フォルダの **絶対パス** を渡します。
 
 ```shell
 # 単眼の場合
-SOURCE_PATH=$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine \
-  bash demo/02_train.sh
+bash demo/02_train.sh \
+  --source-path "$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine"
 
 # NeRSemble の場合
-SOURCE_PATH=$PWD/submodules/VHAP/export/nersemble/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine \
-  bash demo/02_train.sh
+bash demo/02_train.sh \
+  --source-path "$PWD/submodules/VHAP/export/nersemble/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine"
 ```
 
 学習中は `Training progress: NN%|#####| iter/total [elapsed<eta, it/s, loss=...]`
 の tqdm バーが表示されます。学習終了後、
 `output/<RUN_NAME>/point_cloud/iteration_*/point_cloud.ply` などが生成されます。
 
-### 主な環境変数
+### 主な CLI オプション
 
-| 変数 | デフォルト | 用途 |
+| オプション | デフォルト | 用途 |
 | --- | --- | --- |
-| `SOURCE_PATH` | (必須) | VHAP export ディレクトリ |
-| `MODEL_PATH` | `output/<basename of SOURCE_PATH>` | 学習成果物の保存先 |
-| `RUN_NAME` | `<basename of SOURCE_PATH>` | `MODEL_PATH` 名の自動生成に使用 |
-| `ITERATIONS` | `600000` | 学習イテレーション数。動作確認は `30000` 程度でも可 |
-| `PORT` | `60000` | リモートビューア用 GUI ポート |
+| `--source-path` | (必須) | VHAP export ディレクトリ |
+| `--model-path` | `output/<basename of source path>` | 学習成果物の保存先 |
+| `--run-name` | `<basename of source path>` | `--model-path` 名の自動生成に使用 |
+| `--iterations` | `600000` | 学習イテレーション数。動作確認は `30000` 程度でも可 |
+| `--port` | `60000` | リモートビューア用 GUI ポート |
 
 学習中に `python remote_viewer.py --port 60000` で進捗を可視化することも可能です
 （リモートビューアは tqdm とは別系統）。
@@ -224,30 +229,30 @@ SOURCE_PATH=$PWD/submodules/VHAP/export/nersemble/074_EMO-1_v16_DS4_whiteBg_stat
 ## 3. レンダリングデモ
 
 ```shell
-MODEL_PATH=$PWD/output/obama_whiteBg_staticOffset_maskBelowLine \
-  bash demo/03_render.sh
+bash demo/03_render.sh \
+  --model-path "$PWD/output/obama_whiteBg_staticOffset_maskBelowLine"
 ```
 
 レンダリング中は `Rendering progress: NN%|#####| view/total [elapsed<eta, it/s]`
 が表示され、完了後は train / val / test それぞれの PNG シーケンスと MP4 が
 出力されます。
 
-### 主な環境変数
+### 主な CLI オプション
 
-| 変数 | デフォルト | 用途 |
+| オプション | デフォルト | 用途 |
 | --- | --- | --- |
-| `MODEL_PATH` | (必須) | 学習済みモデルディレクトリ |
-| `ITERATION` | `-1` (最新) | ロードするイテレーション |
-| `SELECT_CAMERA_ID` | (なし) | 単一カメラのみレンダリング (例: NeRSemble の正面 = `8`) |
-| `TARGET_PATH` | (なし) | クロスアイデンティティ再現用に別シーケンスを駆動モーションとして使用 |
+| `--model-path` | (必須) | 学習済みモデルディレクトリ |
+| `--iteration` | `-1` (最新) | ロードするイテレーション |
+| `--select-camera-id` | (なし) | 単一カメラのみレンダリング (例: NeRSemble の正面 = `8`) |
+| `--target-path` | (なし) | クロスアイデンティティ再現用に別シーケンスを駆動モーションとして使用 |
 
 ### 例: クロスアイデンティティ再現
 
 ```shell
-MODEL_PATH=$PWD/output/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine \
-TARGET_PATH=$PWD/submodules/VHAP/export/nersemble/218_FREE_v16_DS4_whiteBg_staticOffset_maskBelowLine \
-SELECT_CAMERA_ID=8 \
-  bash demo/03_render.sh
+bash demo/03_render.sh \
+  --model-path "$PWD/output/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine" \
+  --target-path "$PWD/submodules/VHAP/export/nersemble/218_FREE_v16_DS4_whiteBg_staticOffset_maskBelowLine" \
+  --select-camera-id 8
 ```
 
 ---
@@ -262,16 +267,16 @@ bash demo/setup_env.sh
 # 1. 動画を置いて前処理
 mkdir -p submodules/VHAP/data/monocular
 cp /path/to/obama.mp4 submodules/VHAP/data/monocular/
-SEQUENCE_FILE=obama.mp4 bash demo/01_vhap_preprocess_monocular.sh
+bash demo/01_vhap_preprocess_monocular.sh --sequence-file obama.mp4
 
 # 2. 学習 (動作確認なら 30k iter で十分)
-SOURCE_PATH=$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine \
-ITERATIONS=30000 \
-  bash demo/02_train.sh
+bash demo/02_train.sh \
+  --source-path "$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine" \
+  --iterations 30000
 
 # 3. レンダリング
-MODEL_PATH=$PWD/output/obama_whiteBg_staticOffset_maskBelowLine \
-  bash demo/03_render.sh
+bash demo/03_render.sh \
+  --model-path "$PWD/output/obama_whiteBg_staticOffset_maskBelowLine"
 ```
 
 ---
@@ -291,4 +296,4 @@ MODEL_PATH=$PWD/output/obama_whiteBg_staticOffset_maskBelowLine \
   の両方に配置しているか確認してください。
 - **conda env を分けたい場合**: 旧バージョン (env 別) の構成が必要なら、
   `bash setup.sh` と `bash submodules/VHAP/setup.sh` を個別に実行し、
-  デモ側で `GA_ENV` / 直接 `conda activate` を書き換えてください。
+  デモ側では `--env` で使用する env 名を指定してください。

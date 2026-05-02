@@ -18,16 +18,52 @@
 #   submodules/VHAP/output/nersemble/<run>/             # raw tracking results
 #   submodules/VHAP/export/nersemble/<run>/             # NeRF-style export
 #
-# Override anything via env vars, e.g.:
-#   SUBJECT=306 SEQUENCE=EMO-1 bash demo/01_vhap_preprocess_nersemble.sh
+# Usage:
+#   bash demo/01_vhap_preprocess_nersemble.sh --subject 306 --sequence EMO-1
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-SUBJECT="${SUBJECT:-074}"
-SEQUENCE="${SEQUENCE:-EMO-1}"
-DOWNSAMPLE="${DOWNSAMPLE:-4}"
+SUBJECT="074"
+SEQUENCE="EMO-1"
+DOWNSAMPLE="4"
+SUFFIX=""
+EXPORT_SUFFIX=""
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash demo/01_vhap_preprocess_nersemble.sh [options]
+
+Options:
+  --subject ID           NeRSemble subject id (default: 074)
+  --sequence NAME        NeRSemble sequence name (default: EMO-1)
+  --downsample N         Downsample factor passed to VHAP (default: 4)
+  --suffix NAME          Tracking output suffix (default: v16_DS<N>_wBg_staticOffset)
+  --export-suffix NAME   Export output suffix (default: v16_DS<N>_whiteBg_staticOffset_maskBelowLine)
+  --env NAME             Conda env to activate (default: gaussian-avatars)
+  -h, --help             Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --subject) require_option_value "$(basename "$0")" "$1" "$#"; SUBJECT="$2"; shift 2 ;;
+    --sequence) require_option_value "$(basename "$0")" "$1" "$#"; SEQUENCE="$2"; shift 2 ;;
+    --downsample) require_option_value "$(basename "$0")" "$1" "$#"; DOWNSAMPLE="$2"; shift 2 ;;
+    --suffix) require_option_value "$(basename "$0")" "$1" "$#"; SUFFIX="$2"; shift 2 ;;
+    --export-suffix) require_option_value "$(basename "$0")" "$1" "$#"; EXPORT_SUFFIX="$2"; shift 2 ;;
+    --env) require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die_usage "$(basename "$0")" "unknown option: $1" ;;
+  esac
+done
+
+[[ -n "${SUBJECT}" ]] || die_usage "$(basename "$0")" "--subject requires a value"
+[[ -n "${SEQUENCE}" ]] || die_usage "$(basename "$0")" "--sequence requires a value"
+[[ -n "${DOWNSAMPLE}" ]] || die_usage "$(basename "$0")" "--downsample requires a value"
+[[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 SUFFIX="${SUFFIX:-v16_DS${DOWNSAMPLE}_wBg_staticOffset}"
 EXPORT_SUFFIX="${EXPORT_SUFFIX:-v16_DS${DOWNSAMPLE}_whiteBg_staticOffset_maskBelowLine}"
 
@@ -68,4 +104,4 @@ ${PYTHON} vhap/export_as_nerf_dataset.py \
   --background-color white
 
 log "Done. Pass this path to demo/02_train.sh:"
-echo "    SOURCE_PATH=${VHAP_DIR}/${EXPORT_OUTPUT_FOLDER}"
+echo "    bash demo/02_train.sh --source-path \"${VHAP_DIR}/${EXPORT_OUTPUT_FOLDER}\""

@@ -6,40 +6,72 @@
 # (PYTHONUNBUFFERED=1 set in _common.sh).
 #
 # Inputs:
-#   MODEL_PATH        Absolute path to the trained model directory
-#                     (the ${MODEL_PATH} from demo/02_train.sh).
-#   ITERATION         Iteration to load (default: latest if -1).
-#   SELECT_CAMERA_ID  Restrict rendering to a single camera id (e.g. 8 = front
-#                     view in NeRSemble). Empty = render all cameras.
-#   TARGET_PATH       (Optional) cross-identity reenactment: another VHAP-
-#                     exported sequence whose FLAME motion will drive the
-#                     trained avatar.
+#   --model-path        Absolute path to the trained model directory
+#                       (the --model-path from demo/02_train.sh).
+#   --iteration         Iteration to load (default: latest if -1).
+#   --select-camera-id  Restrict rendering to a single camera id (e.g. 8 = front
+#                       view in NeRSemble). Omit to render all cameras.
+#   --target-path       (Optional) cross-identity reenactment: another VHAP-
+#                       exported sequence whose FLAME motion will drive the
+#                       trained avatar.
 #
 # Outputs:
 #   ${MODEL_PATH}/{train,val,test}/ours_<iter>/{renders,gt}/*.png
 #   ${MODEL_PATH}/{train,val,test}/ours_<iter>/{renders,gt}.mp4
 #
 # Examples:
-#   MODEL_PATH=$PWD/output/obama_whiteBg_staticOffset_maskBelowLine bash demo/03_render.sh
+#   bash demo/03_render.sh --model-path "$PWD/output/obama_whiteBg_staticOffset_maskBelowLine"
 #
-#   MODEL_PATH=$PWD/output/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine \
-#     SELECT_CAMERA_ID=8 \
-#     bash demo/03_render.sh
+#   bash demo/03_render.sh \
+#     --model-path "$PWD/output/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine" \
+#     --select-camera-id 8
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-if [ -z "${MODEL_PATH:-}" ]; then
-  echo "[demo] MODEL_PATH is required (path to a trained model directory)." >&2
-  exit 2
+MODEL_PATH=""
+ITERATION="-1"
+SELECT_CAMERA_ID=""
+TARGET_PATH=""
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash demo/03_render.sh --model-path PATH [options]
+
+Options:
+  --model-path PATH        Trained model directory containing cfg_args (required)
+  --iteration N            Iteration to load; -1 means latest (default: -1)
+  --select-camera-id ID    Render only one camera id
+  --target-path PATH       VHAP export used as reenactment motion
+  --env NAME               Conda env to activate (default: gaussian-avatars)
+  -h, --help               Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --model-path) require_option_value "$(basename "$0")" "$1" "$#"; MODEL_PATH="$2"; shift 2 ;;
+    --iteration) require_option_value "$(basename "$0")" "$1" "$#"; ITERATION="$2"; shift 2 ;;
+    --select-camera-id) require_option_value "$(basename "$0")" "$1" "$#"; SELECT_CAMERA_ID="$2"; shift 2 ;;
+    --target-path) require_option_value "$(basename "$0")" "$1" "$#"; TARGET_PATH="$2"; shift 2 ;;
+    --env) require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die_usage "$(basename "$0")" "unknown option: $1" ;;
+  esac
+done
+
+if [ -z "${MODEL_PATH}" ]; then
+  die_usage "$(basename "$0")" "--model-path is required (path to a trained model directory)."
 fi
 if [ ! -f "${MODEL_PATH}/cfg_args" ]; then
   echo "[demo] ${MODEL_PATH} does not look like a trained model (no cfg_args)." >&2
   exit 1
 fi
 
-ITERATION="${ITERATION:--1}"
+[[ -n "${ITERATION}" ]] || die_usage "$(basename "$0")" "--iteration requires a value"
+[[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 
 activate_env
 cd "${REPO_ROOT}"
@@ -50,7 +82,7 @@ if [ -n "${SELECT_CAMERA_ID:-}" ]; then
 fi
 if [ -n "${TARGET_PATH:-}" ]; then
   if [ ! -f "${TARGET_PATH}/transforms_train.json" ]; then
-    echo "[demo] TARGET_PATH=${TARGET_PATH} is not a VHAP export." >&2
+    echo "[demo] --target-path '${TARGET_PATH}' is not a VHAP export." >&2
     exit 1
   fi
   RENDER_ARGS+=( -t "${TARGET_PATH}" )

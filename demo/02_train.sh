@@ -6,34 +6,67 @@
 # (PYTHONUNBUFFERED=1 set in _common.sh).
 #
 # Inputs:
-#   SOURCE_PATH    Absolute path to a VHAP-exported NeRF-style dataset folder
-#                  (the ${EXPORT_OUTPUT_FOLDER} printed by demo 01_*).
+#   --source-path  Absolute path to a VHAP-exported NeRF-style dataset folder
+#                  (the path printed by demo 01_*).
 #                  Must contain transforms_train.json (+ val/test for --eval).
-#   MODEL_PATH     Where to write the trained model (defaults under output/).
-#   ITERATIONS     Total training iterations (default: 600000 to match the
+#   --model-path   Where to write the trained model (defaults under output/).
+#   --iterations   Total training iterations (default: 600000 to match the
 #                  paper's 600k schedule; lower for a quick demo).
-#   PORT           GUI server port for the optional remote viewer.
+#   --port         GUI server port for the optional remote viewer.
 #
 # Outputs:
 #   ${MODEL_PATH}/point_cloud/iteration_*/point_cloud.ply
 #   ${MODEL_PATH}/cameras.json, cfg_args, ...
 #
 # Examples:
-#   SOURCE_PATH=$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine \
-#     bash demo/02_train.sh
+#   bash demo/02_train.sh \
+#     --source-path "$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine"
 #
-#   SOURCE_PATH=$PWD/submodules/VHAP/export/nersemble/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine \
-#     ITERATIONS=30000 \
-#     bash demo/02_train.sh
+#   bash demo/02_train.sh \
+#     --source-path "$PWD/submodules/VHAP/export/nersemble/074_EMO-1_v16_DS4_whiteBg_staticOffset_maskBelowLine" \
+#     --iterations 30000
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-if [ -z "${SOURCE_PATH:-}" ]; then
-  echo "[demo] SOURCE_PATH is required (path to a VHAP NeRF export)." >&2
-  echo "       e.g. SOURCE_PATH=\$PWD/submodules/VHAP/export/monocular/obama_whiteBg_staticOffset_maskBelowLine bash demo/02_train.sh" >&2
-  exit 2
+SOURCE_PATH=""
+MODEL_PATH=""
+RUN_NAME=""
+ITERATIONS="600000"
+PORT="60000"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash demo/02_train.sh --source-path PATH [options]
+
+Options:
+  --source-path PATH   VHAP export directory containing transforms_train.json (required)
+  --model-path PATH    Output model directory (default: output/<source basename>)
+  --run-name NAME      Name used when deriving --model-path (default: source basename)
+  --iterations N       Training iterations (default: 600000)
+  --port PORT          Remote viewer port (default: 60000)
+  --env NAME           Conda env to activate (default: gaussian-avatars)
+  -h, --help           Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --source-path) require_option_value "$(basename "$0")" "$1" "$#"; SOURCE_PATH="$2"; shift 2 ;;
+    --model-path) require_option_value "$(basename "$0")" "$1" "$#"; MODEL_PATH="$2"; shift 2 ;;
+    --run-name) require_option_value "$(basename "$0")" "$1" "$#"; RUN_NAME="$2"; shift 2 ;;
+    --iterations) require_option_value "$(basename "$0")" "$1" "$#"; ITERATIONS="$2"; shift 2 ;;
+    --port) require_option_value "$(basename "$0")" "$1" "$#"; PORT="$2"; shift 2 ;;
+    --env) require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die_usage "$(basename "$0")" "unknown option: $1" ;;
+  esac
+done
+
+if [ -z "${SOURCE_PATH}" ]; then
+  die_usage "$(basename "$0")" "--source-path is required (path to a VHAP NeRF export)."
 fi
 
 if [ ! -f "${SOURCE_PATH}/transforms_train.json" ]; then
@@ -41,10 +74,11 @@ if [ ! -f "${SOURCE_PATH}/transforms_train.json" ]; then
   exit 1
 fi
 
+[[ -n "${ITERATIONS}" ]] || die_usage "$(basename "$0")" "--iterations requires a value"
+[[ -n "${PORT}" ]] || die_usage "$(basename "$0")" "--port requires a value"
+[[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 RUN_NAME="${RUN_NAME:-$(basename "${SOURCE_PATH}")}"
 MODEL_PATH="${MODEL_PATH:-${REPO_ROOT}/output/${RUN_NAME}}"
-ITERATIONS="${ITERATIONS:-600000}"
-PORT="${PORT:-60000}"
 
 activate_env
 cd "${REPO_ROOT}"
@@ -65,4 +99,5 @@ ${PYTHON} train.py \
   --iterations "${ITERATIONS}" \
   --port "${PORT}"
 
-log "Training finished. Pass MODEL_PATH=${MODEL_PATH} to demo/03_render.sh."
+log "Training finished. Pass this path to demo/03_render.sh:"
+echo "    bash demo/03_render.sh --model-path \"${MODEL_PATH}\""

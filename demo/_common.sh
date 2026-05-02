@@ -17,7 +17,8 @@ DEMO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${DEMO_DIR}/.." && pwd)"
 VHAP_DIR="${REPO_ROOT}/submodules/VHAP"
 
-# Single unified conda env. Override by exporting GA_ENV before invoking.
+# Single unified conda env. Demo entrypoints also expose --env for explicit
+# per-run selection; GA_ENV remains as a low-level fallback for compatibility.
 GA_ENV="${GA_ENV:-gaussian-avatars}"
 
 # tqdm writes to stderr by default. Disabling Python stdout/stderr buffering
@@ -56,4 +57,21 @@ require_vhap_submodule() {
 
 log() {
   printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
+}
+
+die_usage() {
+  local script_name="$1"
+  local message="$2"
+  echo "[${script_name}] ${message}" >&2
+  echo "Run 'bash demo/${script_name} --help' for usage." >&2
+  exit 2
+}
+
+require_option_value() {
+  local script_name="$1"
+  local option_name="$2"
+  local remaining_count="$3"
+  if [[ "${remaining_count}" -lt 2 ]]; then
+    die_usage "${script_name}" "${option_name} requires a value"
+  fi
 }

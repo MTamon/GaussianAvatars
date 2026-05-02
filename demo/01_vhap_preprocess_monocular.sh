@@ -21,17 +21,50 @@
 #   submodules/VHAP/export/monocular/<run>/             # NeRF-style export
 #       └── transforms_train.json / transforms_val.json / transforms_test.json
 #
-# Override anything via env vars, e.g.:
-#   SEQUENCE_FILE=alice.mp4 SEQUENCE=alice bash demo/01_vhap_preprocess_monocular.sh
+# Usage:
+#   bash demo/01_vhap_preprocess_monocular.sh --sequence-file alice.mp4 --sequence alice
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
-SEQUENCE_FILE="${SEQUENCE_FILE:-obama.mp4}"
+SEQUENCE_FILE="obama.mp4"
+SEQUENCE=""
+SUFFIX="whiteBg_staticOffset"
+EXPORT_SUFFIX="whiteBg_staticOffset_maskBelowLine"
+
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash demo/01_vhap_preprocess_monocular.sh [options]
+
+Options:
+  --sequence-file PATH   Input video under submodules/VHAP/data/monocular (default: obama.mp4)
+  --sequence NAME        Sequence name used by VHAP/output folders (default: file stem)
+  --suffix NAME          Tracking output suffix (default: whiteBg_staticOffset)
+  --export-suffix NAME   Export output suffix (default: whiteBg_staticOffset_maskBelowLine)
+  --env NAME             Conda env to activate (default: gaussian-avatars)
+  -h, --help             Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --sequence-file) require_option_value "$(basename "$0")" "$1" "$#"; SEQUENCE_FILE="$2"; shift 2 ;;
+    --sequence) require_option_value "$(basename "$0")" "$1" "$#"; SEQUENCE="$2"; shift 2 ;;
+    --suffix) require_option_value "$(basename "$0")" "$1" "$#"; SUFFIX="$2"; shift 2 ;;
+    --export-suffix) require_option_value "$(basename "$0")" "$1" "$#"; EXPORT_SUFFIX="$2"; shift 2 ;;
+    --env) require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift 2 ;;
+    -h|--help) usage; exit 0 ;;
+    *) die_usage "$(basename "$0")" "unknown option: $1" ;;
+  esac
+done
+
+[[ -n "${SEQUENCE_FILE}" ]] || die_usage "$(basename "$0")" "--sequence-file requires a value"
+[[ -n "${SUFFIX}" ]] || die_usage "$(basename "$0")" "--suffix requires a value"
+[[ -n "${EXPORT_SUFFIX}" ]] || die_usage "$(basename "$0")" "--export-suffix requires a value"
+[[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 SEQUENCE="${SEQUENCE:-${SEQUENCE_FILE%.*}}"
-SUFFIX="${SUFFIX:-whiteBg_staticOffset}"
-EXPORT_SUFFIX="${EXPORT_SUFFIX:-whiteBg_staticOffset_maskBelowLine}"
 
 TRACK_OUTPUT_FOLDER="output/monocular/${SEQUENCE}_${SUFFIX}"
 EXPORT_OUTPUT_FOLDER="export/monocular/${SEQUENCE}_${EXPORT_SUFFIX}"
@@ -66,4 +99,4 @@ ${PYTHON} vhap/export_as_nerf_dataset.py \
   --background-color white
 
 log "Done. Pass this path to demo/02_train.sh:"
-echo "    SOURCE_PATH=${VHAP_DIR}/${EXPORT_OUTPUT_FOLDER}"
+echo "    bash demo/02_train.sh --source-path \"${VHAP_DIR}/${EXPORT_OUTPUT_FOLDER}\""

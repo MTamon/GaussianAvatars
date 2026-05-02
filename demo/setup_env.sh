@@ -43,16 +43,16 @@
 # GA's download_assets.sh (which writes flame_model/assets/flame/*.pkl).
 # The VHAP-side paths under submodules/VHAP/asset/flame/ are populated by
 # symlinking the GA copies — no second round-trip to the FLAME server.
-# Set SKIP_DOWNLOAD_ASSETS=1 to opt out (you'll have to place the .pkl
+# Pass --skip-download-assets to opt out (you'll have to place the .pkl
 # files yourself, see demo/README.md §0.3).
 #
 # Usage:
 #   bash demo/setup_env.sh                          # full install + assets
 #   bash demo/setup_env.sh --skip-ga                # skip GA setup
 #   bash demo/setup_env.sh --skip-vhap              # skip VHAP setup
-#   SKIP_DOWNLOAD_ASSETS=1 bash demo/setup_env.sh   # do not fetch FLAME
-#   FLAME_USER=u FLAME_PASS=p bash demo/setup_env.sh   # non-interactive
-#   GA_ENV=my-env bash demo/setup_env.sh            # override conda env
+#   bash demo/setup_env.sh --skip-download-assets   # do not fetch FLAME
+#   bash demo/setup_env.sh --flame-user u --flame-pass p   # non-interactive
+#   bash demo/setup_env.sh --env my-env             # override conda env
 # -----------------------------------------------------------------------------
 
 set -eo pipefail
@@ -60,21 +60,44 @@ source "$(dirname "${BASH_SOURCE[0]}")/_common.sh"
 
 SKIP_GA=0
 SKIP_VHAP=0
-SKIP_DOWNLOAD_ASSETS="${SKIP_DOWNLOAD_ASSETS:-0}"
-FLAME_USER="${FLAME_USER:-}"
-FLAME_PASS="${FLAME_PASS:-}"
+SKIP_DOWNLOAD_ASSETS=0
+FLAME_USER=""
+FLAME_PASS=""
 
-for arg in "$@"; do
-  case "$arg" in
+usage() {
+  cat <<'USAGE'
+Usage:
+  bash demo/setup_env.sh [options]
+
+Options:
+  --skip-ga                 Skip GaussianAvatars setup.sh
+  --skip-vhap               Skip VHAP pip-only setup
+  --skip-download-assets    Do not fetch FLAME assets
+  --flame-user USER         FLAME username for non-interactive asset download
+  --flame-pass PASS         FLAME password for non-interactive asset download
+  --env NAME                Conda env to create/use (default: gaussian-avatars)
+  -h, --help                Show this help
+USAGE
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
     --skip-ga)              SKIP_GA=1 ;;
     --skip-vhap)            SKIP_VHAP=1 ;;
     --skip-download-assets) SKIP_DOWNLOAD_ASSETS=1 ;;
-    -h|--help)
-      sed -n '1,/^# ---/p' "${BASH_SOURCE[0]}" | sed 's/^# \?//'
-      exit 0 ;;
-    *) echo "[setup_env.sh] unknown flag: $arg" >&2; exit 2 ;;
+    --flame-user)           require_option_value "$(basename "$0")" "$1" "$#"; FLAME_USER="$2"; shift ;;
+    --flame-pass)           require_option_value "$(basename "$0")" "$1" "$#"; FLAME_PASS="$2"; shift ;;
+    --env)                  require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift ;;
+    -h|--help)              usage; exit 0 ;;
+    *) die_usage "$(basename "$0")" "unknown option: $1" ;;
   esac
+  shift
 done
+
+[[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
+if [[ "${SKIP_DOWNLOAD_ASSETS}" != "1" ]]; then
+  [[ -n "${FLAME_USER}" || -z "${FLAME_PASS}" ]] || die_usage "$(basename "$0")" "--flame-pass requires --flame-user"
+fi
 
 prompt_flame_credentials() {
   # Resolve credentials before any heavy work so we can fail fast and avoid
@@ -97,7 +120,7 @@ prompt_flame_credentials() {
   if [[ -z "${FLAME_USER}" ]]; then
     if [[ ! -t 0 ]]; then
       echo "[setup_env.sh] FLAME credentials needed but stdin is not a TTY." >&2
-      echo "  Re-run with FLAME_USER=... FLAME_PASS=... or SKIP_DOWNLOAD_ASSETS=1." >&2
+      echo "  Re-run with --flame-user ... --flame-pass ... or --skip-download-assets." >&2
       exit 1
     fi
     read -r  -p "Username (FLAME): " FLAME_USER
@@ -170,7 +193,7 @@ if [[ "${SKIP_DOWNLOAD_ASSETS}" != "1" ]]; then
     fi
   done
 else
-  log "[3/3] SKIP_DOWNLOAD_ASSETS=1 — skipping FLAME asset fetch."
+  log "[3/3] --skip-download-assets set; skipping FLAME asset fetch."
 fi
 
 log "Done. Both stacks share env '${GA_ENV}'."
