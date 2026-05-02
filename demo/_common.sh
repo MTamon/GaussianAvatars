@@ -56,7 +56,10 @@ require_vhap_submodule() {
 }
 
 log() {
-  printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*"
+  # Write to stderr so log lines remain visible even when a caller captures
+  # a function's stdout via $(...) (e.g. run_track_one_clip in 01c, which uses
+  # the captured stdout to return the export folder path).
+  printf '\n[%s] %s\n' "$(date '+%H:%M:%S')" "$*" >&2
 }
 
 die_usage() {
