@@ -7,4 +7,4 @@
 [submodule "submodules/VHAP"]
 	path = submodules/VHAP
 	url = https://github.com/MTamon/VHAP.git
-	branch = cuda128
+	branch = cuda128alpha
