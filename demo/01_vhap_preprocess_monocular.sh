@@ -33,6 +33,7 @@ SEQUENCE=""
 SUFFIX="whiteBg_staticOffset"
 EXPORT_SUFFIX="whiteBg_staticOffset_maskBelowLine"
 BATCH_SIZE="16"
+LANDMARK_NJOBS="1"
 SKIP_EXISTING=1
 
 usage() {
@@ -47,6 +48,13 @@ Options:
   --export-suffix NAME   Export output suffix (default: whiteBg_staticOffset_maskBelowLine)
   --batch-size N         VHAP tracking frame batch size (default: 16).
                          Use 1 for the original conservative tracking behavior.
+  --landmark-njobs N     Forwarded as --data.landmark-detector-njobs to
+                         vhap/track.py (default: 1). VHAP's upstream default
+                         is 8, but joblib forks worker processes after the
+                         parent has already initialised a CUDA context, which
+                         on PyTorch+CUDA tends to silently hang or contend
+                         over GPU0. Keep at 1 unless you know your environment
+                         tolerates fork after CUDA init.
   --no-skip-existing     Re-run all stages even if completed outputs already exist.
   --env NAME             Conda env to activate (default: gaussian-avatars)
   -h, --help             Show this help
@@ -60,6 +68,7 @@ while [[ $# -gt 0 ]]; do
     --suffix) require_option_value "$(basename "$0")" "$1" "$#"; SUFFIX="$2"; shift 2 ;;
     --export-suffix) require_option_value "$(basename "$0")" "$1" "$#"; EXPORT_SUFFIX="$2"; shift 2 ;;
     --batch-size) require_option_value "$(basename "$0")" "$1" "$#"; BATCH_SIZE="$2"; shift 2 ;;
+    --landmark-njobs) require_option_value "$(basename "$0")" "$1" "$#"; LANDMARK_NJOBS="$2"; shift 2 ;;
     --no-skip-existing) SKIP_EXISTING=0; shift ;;
     --env) require_option_value "$(basename "$0")" "$1" "$#"; GA_ENV="$2"; shift 2 ;;
     -h|--help) usage; exit 0 ;;
@@ -71,6 +80,7 @@ done
 [[ -n "${SUFFIX}" ]] || die_usage "$(basename "$0")" "--suffix requires a value"
 [[ -n "${EXPORT_SUFFIX}" ]] || die_usage "$(basename "$0")" "--export-suffix requires a value"
 [[ "${BATCH_SIZE}" =~ ^[1-9][0-9]*$ ]] || die_usage "$(basename "$0")" "--batch-size must be a positive integer"
+[[ "${LANDMARK_NJOBS}" =~ ^[1-9][0-9]*$ ]] || die_usage "$(basename "$0")" "--landmark-njobs must be a positive integer"
 [[ -n "${GA_ENV}" ]] || die_usage "$(basename "$0")" "--env requires a value"
 SEQUENCE="${SEQUENCE:-${SEQUENCE_FILE%.*}}"
 
@@ -134,6 +144,7 @@ else
     --data.root_folder "data/monocular" \
     --exp.output_folder "${TRACK_OUTPUT_FOLDER}" \
     --data.sequence "${SEQUENCE}" \
+    --data.landmark-detector-njobs "${LANDMARK_NJOBS}" \
     --batch-size "${BATCH_SIZE}"
 fi
 
