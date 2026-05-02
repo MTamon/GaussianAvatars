@@ -27,7 +27,7 @@
 #     train.py consumes directly.
 #
 # Inputs (place before running):
-#   submodules/VHAP/data/monocular/<sequence_file>      # one per --sequence-file
+#   <sequence_file>                                     # one video path per --sequence-file
 #   submodules/VHAP/asset/flame/flame2023.pkl
 #   submodules/VHAP/asset/flame/FLAME_masks.pkl
 #
@@ -78,7 +78,11 @@ Required:
                              (shape, lights, tex_*, static_offset, focal_length).
                              Must match one of the --sequence-file entries.
                              Pick the longest / most-frontal / best-lit take.
-  --sequence-file PATH       Input video under submodules/VHAP/data/monocular.
+  --sequence-file PATH       Input video path.
+                             Relative paths are resolved from the directory
+                             where this script is launched. A bare filename
+                             still falls back to submodules/VHAP/data/monocular
+                             for backward compatibility.
                              Repeat the flag once per take.
 
 Options:
@@ -127,7 +131,8 @@ fi
 
 # Strip extension from --shape-source-clip and validate it matches one of the
 # --sequence-file stems.
-SHAPE_SOURCE_STEM="${SHAPE_SOURCE_CLIP%.*}"
+SHAPE_SOURCE_STEM="$(basename "${SHAPE_SOURCE_CLIP}")"
+SHAPE_SOURCE_STEM="${SHAPE_SOURCE_STEM%.*}"
 
 declare -a CLIP_STEMS=()
 SHAPE_SOURCE_FOUND=0
@@ -147,16 +152,52 @@ fi
 require_vhap_submodule
 activate_env
 
-cd "${VHAP_DIR}"
+LAUNCH_DIR="$(pwd -P)"
+
+canonical_existing_path() {
+  local path="$1"
+  local dir
+  dir="$(cd "$(dirname "${path}")" && pwd -P)"
+  echo "${dir}/$(basename "${path}")"
+}
+
+resolve_sequence_file() {
+  local arg="$1"
+  local launch_candidate
+  local legacy_candidate
+
+  if [[ "${arg}" == /* ]]; then
+    launch_candidate="${arg}"
+  else
+    launch_candidate="${LAUNCH_DIR}/${arg}"
+  fi
+
+  if [ -e "${launch_candidate}" ]; then
+    canonical_existing_path "${launch_candidate}"
+    return
+  fi
+
+  legacy_candidate="${VHAP_DIR}/data/monocular/${arg}"
+  if [ -e "${legacy_candidate}" ]; then
+    canonical_existing_path "${legacy_candidate}"
+    return
+  fi
+
+  echo "[demo] input video not found: ${launch_candidate}" >&2
+  if [[ "${arg}" != /* ]]; then
+    echo "       Also checked legacy VHAP path: ${legacy_candidate}" >&2
+  fi
+  echo "       Pass an existing video path, for example: --sequence-file data/src/example.mp4" >&2
+  exit 1
+}
 
 # Validate every input file exists before we start any expensive work.
+declare -a RESOLVED_SEQUENCE_FILES=()
 for sf in "${SEQUENCE_FILES[@]}"; do
-  if [ ! -e "data/monocular/${sf}" ]; then
-    echo "[demo] input video not found: ${VHAP_DIR}/data/monocular/${sf}" >&2
-    echo "       Place the monocular video there and re-run." >&2
-    exit 1
-  fi
+  RESOLVED_SEQUENCE_FILES+=("$(resolve_sequence_file "${sf}")")
 done
+
+cd "${VHAP_DIR}"
 
 # Per-clip naming convention: <subject>_<stem>_<suffix>
 # The combined dataset name is:    <subject>_UNION<N>_<export_suffix>
@@ -169,23 +210,24 @@ COMBINED_FOLDER="export/monocular/${COMBINED_NAME}"
 
 run_track_one_clip() {
   local stem="$1"
-  local sequence_file="$2"
-  local extra_args=("${@:3}")
+  local input_video="$2"
+  local data_root="$3"
+  local extra_args=("${@:4}")
 
   local sequence="${SUBJECT}_${stem}"
   local track_out="output/monocular/${sequence}_${SUFFIX}"
   local export_out="export/monocular/${sequence}_${EXPORT_SUFFIX}"
 
-  log "  preprocess ${sequence_file}"
+  log "  preprocess ${input_video}"
   ${PYTHON} vhap/preprocess_video.py \
-    --input "data/monocular/${sequence_file}" \
+    --input "${input_video}" \
     --matting_method robust_video_matting
 
   log "  FLAME tracking -> ${track_out}"
   ${PYTHON} vhap/track.py \
-    --data.root_folder "data/monocular" \
+    --data.root_folder "${data_root}" \
     --exp.output_folder "${track_out}" \
-    --data.sequence "${sequence_file%.*}" \
+    --data.sequence "${stem}" \
     "${extra_args[@]}"
 
   log "  export -> ${export_out}"
@@ -232,7 +274,7 @@ declare -a EXPORT_FOLDERS=()
 
 log "[A] Phase A — shape source clip: ${SHAPE_SOURCE_STEM}"
 SHAPE_SOURCE_FILE=""
-for sf in "${SEQUENCE_FILES[@]}"; do
+for sf in "${RESOLVED_SEQUENCE_FILES[@]}"; do
   stem_a="$(basename "${sf}")"
   stem_a="${stem_a%.*}"
   if [[ "${stem_a}" == "${SHAPE_SOURCE_STEM}" ]]; then
@@ -241,7 +283,7 @@ for sf in "${SEQUENCE_FILES[@]}"; do
   fi
 done
 
-shape_export=$(run_track_one_clip "${SHAPE_SOURCE_STEM}" "${SHAPE_SOURCE_FILE}" | tail -n 1)
+shape_export=$(run_track_one_clip "${SHAPE_SOURCE_STEM}" "${SHAPE_SOURCE_FILE}" "$(dirname "${SHAPE_SOURCE_FILE}")" | tail -n 1)
 EXPORT_FOLDERS+=("${shape_export}")
 
 PASS_A_NPZ=$(resolve_pass_a_npz "${SHAPE_SOURCE_STEM}")
@@ -251,7 +293,7 @@ log "[A] canonical FLAME globals -> ${PASS_A_NPZ}"
 # Phase B: every other clip — frozen globals.
 # ----------------------------------------------------------------------------
 log "[B] Phase B — re-track remaining clips with frozen globals"
-for sf in "${SEQUENCE_FILES[@]}"; do
+for sf in "${RESOLVED_SEQUENCE_FILES[@]}"; do
   stem_b="$(basename "${sf}")"
   stem_b="${stem_b%.*}"
   if [[ "${stem_b}" == "${SHAPE_SOURCE_STEM}" ]]; then
@@ -259,7 +301,7 @@ for sf in "${SEQUENCE_FILES[@]}"; do
   fi
 
   log "  -> clip ${stem_b}"
-  clip_export=$(run_track_one_clip "${stem_b}" "${sf}" \
+  clip_export=$(run_track_one_clip "${stem_b}" "${sf}" "$(dirname "${sf}")" \
     --model.flame_params_path "${PASS_A_NPZ}" \
     --load_globals_only \
     --freeze_globals_from_init | tail -n 1)
